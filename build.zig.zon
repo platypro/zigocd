@@ -19,10 +19,6 @@
             .url = "git+https://github.com/platypro/libusb#832b30968e5912ed44e2b6f85b160bd1ca9c76d4",
             .hash = "122012df9f49dcdbbd9d180716fb6c4c5fb34a37c0b8483a4838115f59087a4c6bde",
         },
-        .mach = .{
-            .url = "https://pkg.machengine.org/mach/b72f0e11b6d292c2b60789359a61f7ee6d7dc371.tar.gz",
-            .hash = "122015e1dac4afaf275f7f2adde3814e6a27f5799cbef96bb487ee305f7e33f4dca3",
-        },
     },
     .paths = .{
         "build.zig",

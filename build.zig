@@ -26,13 +26,9 @@ pub fn build(b: *std.Build) void {
     const libusb_dep = b.dependency("libusb", .{});
 
     exe.linkLibrary(libusb_dep.artifact("usb"));
-
-    // Link mach
-    const mach_dep = b.dependency("mach", .{
-        .target = target,
-        .optimize = optimize,
-    });
-    exe.root_module.addImport("mach", mach_dep.module("mach"));
+    if (b.graph.host.result.os.tag == .windows) {
+        exe.linkSystemLibrary("shlwapi");
+    }
 
     // This declares intent for the executable to be installed into the
     // standard location when the user invokes the "install" step (the default
@@ -62,28 +58,19 @@ pub fn build(b: *std.Build) void {
     const run_step = b.step("run", "Run the app");
     run_step.dependOn(&run_cmd.step);
 
-    // Creates a step for unit testing. This only builds the test executable
-    // but does not run it.
-    const lib_unit_tests = b.addTest(.{
-        .root_source_file = b.path("src/root.zig"),
-        .target = target,
-        .optimize = optimize,
+    const test_firmware = b.addExecutable(.{
+        .name = "test_firmware.elf",
+        .target = b.resolveTargetQuery(std.Target.Query{
+            .abi = .eabihf,
+            .cpu_arch = .thumb,
+            .cpu_model = .{ .explicit = &std.Target.arm.cpu.cortex_m4 },
+            .os_tag = .freestanding,
+            .ofmt = .elf,
+        }),
+        .strip = false,
+        .root_source_file = b.path("test_firmware/source.zig"),
     });
-
-    const run_lib_unit_tests = b.addRunArtifact(lib_unit_tests);
-
-    const exe_unit_tests = b.addTest(.{
-        .root_source_file = b.path("src/main.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
-
-    const run_exe_unit_tests = b.addRunArtifact(exe_unit_tests);
-
-    // Similar to creating the run step earlier, this exposes a `test` step to
-    // the `zig build --help` menu, providing a way for the user to request
-    // running the unit tests.
-    const test_step = b.step("test", "Run unit tests");
-    test_step.dependOn(&run_lib_unit_tests.step);
-    test_step.dependOn(&run_exe_unit_tests.step);
+    test_firmware.setLinkerScript(b.path("test_firmware/link.ld"));
+    test_firmware.entry = .{ .symbol_name = "_start" };
+    b.installArtifact(test_firmware);
 }

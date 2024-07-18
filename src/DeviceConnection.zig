@@ -14,6 +14,7 @@ const usb_buf_size = 0x1000; // 4kb
 const ProcessedDeviceList = std.ArrayList(ChoosableDevice);
 
 const c = @cImport({
+    @cDefine("MIDL_INTERFACE", "struct");
     @cInclude("libusb.h");
 });
 
@@ -122,8 +123,8 @@ pub fn get_devices(self: *@This()) ![]ChoosableDevice {
 
         const reinterpreted_read_buf = @as([*]u16, @alignCast(@ptrCast(self.usb_read_buf.ptr)))[0..@divExact(516, 2)];
 
-        cached_device.manufacturer_str = try std.unicode.utf16leToUtf8Alloc(self.allocator, reinterpreted_read_buf[1..len1]);
-        cached_device.product_str = try std.unicode.utf16leToUtf8Alloc(self.allocator, reinterpreted_read_buf[130..len2]);
+        cached_device.manufacturer_str = try std.unicode.utf16LeToUtf8Alloc(self.allocator, reinterpreted_read_buf[1..len1]);
+        cached_device.product_str = try std.unicode.utf16LeToUtf8Alloc(self.allocator, reinterpreted_read_buf[130..len2]);
 
         try self.cached_processed_devices.append(cached_device);
     }
