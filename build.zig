@@ -1,5 +1,8 @@
 const std = @import("std");
 
+const microzig = @import("microzig/build");
+const microzig_atsam = @import("microzig/bsp/microchip/atsam");
+
 // Although this function looks imperative, note that its job is to
 // declaratively construct a build graph that will be executed by an external
 // runner.
@@ -58,19 +61,21 @@ pub fn build(b: *std.Build) void {
     const run_step = b.step("run", "Run the app");
     run_step.dependOn(&run_cmd.step);
 
-    const test_firmware = b.addExecutable(.{
-        .name = "test_firmware.elf",
-        .target = b.resolveTargetQuery(std.Target.Query{
-            .abi = .eabihf,
-            .cpu_arch = .thumb,
-            .cpu_model = .{ .explicit = &std.Target.arm.cpu.cortex_m4 },
-            .os_tag = .freestanding,
-            .ofmt = .elf,
-        }),
-        .strip = false,
-        .root_source_file = b.path("test_firmware/source.zig"),
-    });
-    test_firmware.setLinkerScript(b.path("test_firmware/link.ld"));
-    test_firmware.entry = .{ .symbol_name = "_start" };
-    b.installArtifact(test_firmware);
+    const mz = microzig.init(b, .{});
+    const test_firmware = mz.add_firmware(
+        b,
+        .{
+            .name = "test_firmware",
+            .target = microzig_atsam.chips.atsamd51j19,
+            .optimize = optimize,
+            .root_source_file = b.path("test_firmware/source.zig"),
+        },
+    );
+    const test_firmware_install = b.addInstallFileWithDir(
+        test_firmware.artifact.getEmittedBin(),
+        .bin,
+        "test_firmware.elf",
+    );
+    b.getInstallStep().dependOn(&test_firmware_install.step);
+    //    mz.install_firmware(b, test_firmware, .{ .format = .elf });
 }
