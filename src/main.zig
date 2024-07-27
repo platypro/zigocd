@@ -30,11 +30,13 @@ pub fn main() !void {
     }
 
     var connection = try DeviceConnection.init(allocator);
+    defer connection.deinit();
     const devices = try connection.get_devices();
 
-    for (devices) |device| {
-        std.debug.print("Device Found: {s} {s}\n", .{ device.manufacturer_str, device.product_str });
+    if (devices.len == 0) {
+        std.debug.print("No Devices!\n", .{});
+        return;
     }
 
-    connection.deinit();
+    try connection.choose_device(devices[0]);
 }
