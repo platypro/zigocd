@@ -1,5 +1,9 @@
 const std = @import("std");
 
+const DeviceQueue = @import("DeviceQueue.zig");
+const Promise = @import("Promise.zig").Promise;
+const definitions = @import("definitions.zig");
+
 allocator: std.mem.Allocator,
 usb_ctx: ?*c.libusb_context,
 cached_devices: [*c]?*c.libusb_device,
@@ -16,129 +20,6 @@ const Error = error{
     DeviceNoLongerAvailable,
 };
 
-fn Promise(comptime T: type) type {
-    const HeapType = struct {
-        value: ?T = null,
-        sema: std.Thread.Semaphore = {},
-    };
-    return struct {
-        allocator: std.mem.Allocator,
-        heap: ?*HeapType = null,
-
-        fn init(allocator: std.mem.Allocator) !@This() {
-            const result = .{
-                .allocator = allocator,
-                .heap = try allocator.create(HeapType),
-            };
-            result.heap.value = null;
-            result.heap.sema = .{};
-
-            return result;
-        }
-
-        fn fulfill(self: @This(), val: T) void {
-            if (self.heap == null) return;
-            self.heap.?.value = val;
-            self.heap.?.sema.post();
-        }
-
-        pub fn wait(self: *@This()) ?T {
-            if (self.heap == null) return null;
-            self.heap.?.sema.wait();
-            const result = self.heap.?.value;
-            self.allocator.destroy(self.heap.?);
-            self.heap = null;
-            return result.?;
-        }
-
-        pub fn poll(self: *@This()) ?T {
-            if (self.heap == null) return null;
-            if (self.heap.?.sema.permits > 0) {
-                const result = self.heap.?.value;
-                self.allocator.destroy(self.heap.?);
-                self.heap = null;
-                return result;
-            } else return null;
-        }
-
-        pub fn discard(self: *@This()) void {
-            self.allocator.destroy(self.heap.?);
-            self.heap = null;
-        }
-    };
-}
-
-const DeviceQueue = struct {
-    queue: [QueueSize]QueueItem,
-    mutex: std.Thread.Mutex = .{},
-    head: u32 = 0,
-    tail: u32 = 0,
-
-    const QueueSize = 5;
-
-    const QueueItemHdr = enum(usize) {
-        none,
-        init,
-        read_reg,
-        write_reg,
-    };
-    const QueueItem = struct {
-        typ: QueueItemHdr,
-        val1: u32,
-        val2: u32,
-        promise: Promise(u32),
-    };
-
-    const QueueError = error{
-        QueueFull,
-    };
-
-    fn init(allocator: std.mem.Allocator) !@This() {
-        var result: @This() = undefined;
-        result.head = 0;
-        result.tail = 0;
-        result.mutex = .{};
-
-        for (&result.queue) |*item| {
-            item.val1 = 0;
-            item.val2 = 0;
-            item.typ = .none;
-            item.promise = try Promise(u32).init(allocator);
-        }
-
-        return result;
-    }
-
-    fn push(self: *@This(), typ: QueueItemHdr, val1: u32, val2: u32) !Promise(u32) {
-        self.mutex.lock();
-        defer self.mutex.unlock();
-        if (self.tail == ((self.head + 1) % QueueSize)) return QueueError.QueueFull;
-
-        self.queue[self.head].typ = typ;
-        self.queue[self.head].val1 = val1;
-        self.queue[self.head].val2 = val2;
-
-        const result = self.queue[self.head].promise;
-        self.head = ((self.head + 1) % QueueSize);
-        return result;
-    }
-
-    fn pop(self: *@This()) ?QueueItem {
-        self.mutex.lock();
-        defer self.mutex.unlock();
-        if (self.head == self.tail) {
-            return null;
-        }
-
-        const result = self.queue[self.tail];
-        self.tail = ((self.tail + 1) % QueueSize);
-
-        return result;
-    }
-};
-
-const QueueBuffer = struct { std.RingBuffer() };
-
 const usb_buf_size = 0x1000; // 4kb
 const ProcessedDeviceList = std.ArrayList(ChoosableDevice);
 
@@ -146,6 +27,29 @@ const c = @cImport({
     @cDefine("MIDL_INTERFACE", "struct");
     @cInclude("libusb.h");
 });
+
+const state = enum {
+    unconnected_from_probe,
+    unconnected_from_device,
+    connected_to_device,
+};
+
+const ChoosableDevice = struct {
+    typ: Type,
+    bus: u16,
+    port: u16,
+    manufacturer_str: []const u8,
+    product_str: []const u8,
+    has_driver: bool,
+    handle: usize, // Index into cached_devices array
+
+    const Type = enum {
+        jlink,
+    };
+};
+
+const JLINK_ENDPOINT_IN = 0x81;
+const JLINK_ENDPOINT_OUT = 0x02;
 
 fn evt_cb(ctx: *@This()) void {
     while (ctx.exit == 0) {
@@ -213,29 +117,6 @@ pub fn deinit(self: *@This()) void {
     self.allocator.destroy(self);
 }
 
-const state = enum {
-    unconnected_from_probe,
-    unconnected_from_device,
-    connected_to_device,
-};
-
-const ChoosableDevice = struct {
-    typ: Type,
-    bus: u16,
-    port: u16,
-    manufacturer_str: []const u8,
-    product_str: []const u8,
-    has_driver: bool,
-    handle: usize, // Index into cached_devices array
-
-    const Type = enum {
-        jlink,
-    };
-};
-
-const JLINK_ENDPOINT_IN = 0x81;
-const JLINK_ENDPOINT_OUT = 0x02;
-
 fn jlink_write_op(self: *@This(), comptime T: type, in: T, dir: T) Promise(T) {
     const a: c.struct_libusb_transfer = undefined;
 
@@ -286,58 +167,6 @@ fn jlink_write_op(self: *@This(), comptime T: type, in: T, dir: T) Promise(T) {
 
     return result;
 }
-
-const SwdWriteOp = struct {
-    Start: u1 = 1,
-    APnDP: enum(u1) {
-        AP = 1,
-        DP = 0,
-    },
-    RnW: enum(u1) {
-        R = 1,
-        W = 0,
-    },
-    A: u2,
-    Parity: u1,
-    Stop: u1 = 0,
-    Park: u1 = 1,
-    Trn1: u1 = 0,
-    Ack: u3 = 0,
-    Trn2: u1 = 0,
-
-    const Dir = SwdWriteOp{
-        .Start = 1, // Out
-        .APnDP = 1, // Out
-        .RnW = 1, // Out
-        .A = 0x3, // Out
-        .Parity = 1, // Out
-        .Stop = 1, // Out
-        .Park = 1, // Out
-        .Trn1 = 0, // Turnaround (In)
-        .Ack = 0, // In
-        .Trn2 = 0, // Turnaround (In)
-    };
-};
-
-const SwdReadData = struct {
-    data: u32,
-    parity: u1,
-
-    const Dir = SwdReadData{
-        .data = 0x00000000, // In
-        .parity = 0x0, // In
-    };
-};
-
-const SwdWriteData = struct {
-    data: u32,
-    parity: u1,
-
-    const Dir = SwdWriteData{
-        .data = 0xFFFFFFFF, // Out
-        .parity = 0x1, // Out
-    };
-};
 
 pub fn read_reg(self: *@This(), addr: u32) Promise(u32) {
     self.cmd_queue.push(.read_reg, addr);
