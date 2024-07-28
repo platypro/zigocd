@@ -38,5 +38,6 @@ pub fn main() !void {
         return;
     }
 
-    try connection.choose_device(devices[0]);
+    var dev = try connection.choose_device(devices[0]);
+    _ = dev.wait();
 }

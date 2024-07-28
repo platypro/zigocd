@@ -18,42 +18,52 @@ const Error = error{
 
 fn Promise(comptime T: type) type {
     const HeapType = struct {
-        value: ?T = {},
-        mut: std.Thread.Mutex = {},
-
-        fn fulfill(self: @This(), val: T) void {
-            self.value = val;
-            self.mut.unlock();
-        }
+        value: ?T = null,
+        sema: std.Thread.Semaphore = {},
     };
     return struct {
         allocator: std.mem.Allocator,
         heap: ?*HeapType = null,
 
         fn init(allocator: std.mem.Allocator) !@This() {
-            var self: @This() = .{
+            const result = .{
                 .allocator = allocator,
                 .heap = try allocator.create(HeapType),
             };
-            self.heap.?.mut.lock();
-            return self;
-        }
+            result.heap.value = null;
+            result.heap.sema = .{};
 
-        fn wait(self: *@This()) T {
-            if (self.heap == null) unreachable;
-            self.heap.?.mut.lock();
-            const result = self.heap.?.value;
-            self.allocator.free(self.heap);
             return result;
         }
 
-        fn poll(self: *@This()) ?T {
-            if (self.heap == null) unreachable;
-            if (self.heap.?.mut.tryLock()) {
+        fn fulfill(self: @This(), val: T) void {
+            if (self.heap == null) return;
+            self.heap.?.value = val;
+            self.heap.?.sema.post();
+        }
+
+        pub fn wait(self: *@This()) ?T {
+            if (self.heap == null) return null;
+            self.heap.?.sema.wait();
+            const result = self.heap.?.value;
+            self.allocator.destroy(self.heap.?);
+            self.heap = null;
+            return result.?;
+        }
+
+        pub fn poll(self: *@This()) ?T {
+            if (self.heap == null) return null;
+            if (self.heap.?.sema.permits > 0) {
                 const result = self.heap.?.value;
-                self.allocator.free(self.heap);
+                self.allocator.destroy(self.heap.?);
+                self.heap = null;
                 return result;
             } else return null;
+        }
+
+        pub fn discard(self: *@This()) void {
+            self.allocator.destroy(self.heap.?);
+            self.heap = null;
         }
     };
 }
@@ -74,7 +84,8 @@ const DeviceQueue = struct {
     };
     const QueueItem = struct {
         typ: QueueItemHdr,
-        val: u32,
+        val1: u32,
+        val2: u32,
         promise: Promise(u32),
     };
 
@@ -89,7 +100,8 @@ const DeviceQueue = struct {
         result.mutex = .{};
 
         for (&result.queue) |*item| {
-            item.val = 0;
+            item.val1 = 0;
+            item.val2 = 0;
             item.typ = .none;
             item.promise = try Promise(u32).init(allocator);
         }
@@ -97,24 +109,29 @@ const DeviceQueue = struct {
         return result;
     }
 
-    fn push(self: *@This(), typ: QueueItemHdr, val: u32) !Promise(u32) {
+    fn push(self: *@This(), typ: QueueItemHdr, val1: u32, val2: u32) !Promise(u32) {
         self.mutex.lock();
-        if (self.head == ((self.tail + 1) % QueueSize)) return QueueError.QueueFull;
+        defer self.mutex.unlock();
+        if (self.tail == ((self.head + 1) % QueueSize)) return QueueError.QueueFull;
 
         self.queue[self.head].typ = typ;
-        self.queue[self.head].val = val;
-        return self.queue[self.head].promise;
+        self.queue[self.head].val1 = val1;
+        self.queue[self.head].val2 = val2;
+
+        const result = self.queue[self.head].promise;
+        self.head = ((self.head + 1) % QueueSize);
+        return result;
     }
 
     fn pop(self: *@This()) ?QueueItem {
         self.mutex.lock();
+        defer self.mutex.unlock();
         if (self.head == self.tail) {
             return null;
         }
 
         const result = self.queue[self.tail];
         self.tail = ((self.tail + 1) % QueueSize);
-        self.mutex.unlock();
 
         return result;
     }
@@ -139,7 +156,20 @@ fn evt_cb(ctx: *@This()) void {
 }
 
 fn cmd_queue_cb(ctx: *@This()) void {
-    while (ctx.exit == 0) {}
+    while (ctx.exit == 0) {
+        const instr_opt = ctx.cmd_queue.pop();
+        if (instr_opt != null) {
+            const instr = instr_opt.?;
+            switch (instr.typ) {
+                .none => return,
+                .init => {
+                    instr.promise.fulfill(0);
+                },
+                .read_reg => {},
+                .write_reg => {},
+            }
+        }
+    }
 }
 
 pub fn init(allocator: std.mem.Allocator) !*@This() {
@@ -164,6 +194,8 @@ pub fn init(allocator: std.mem.Allocator) !*@This() {
 pub fn deinit(self: *@This()) void {
     self.exit = 1;
     if (self.current_device != null) {
+        c.libusb_close(self.current_device);
+        self.current_device = null;
         self.cmd_queue_thread.join();
         self.evt_thread.join();
     }
@@ -174,6 +206,10 @@ pub fn deinit(self: *@This()) void {
         self.allocator.free(dev.product_str);
     }
     self.cached_processed_devices.deinit();
+
+    c.libusb_exit(self.usb_ctx);
+    self.usb_ctx = null;
+
     self.allocator.destroy(self);
 }
 
@@ -382,8 +418,15 @@ pub fn get_devices(self: *@This()) ![]ChoosableDevice {
     return self.cached_processed_devices.items;
 }
 
-pub fn choose_device(self: *@This(), dev: ChoosableDevice) !void {
+pub fn choose_device(self: *@This(), dev: ChoosableDevice) !Promise(u32) {
+    if (self.current_device != null) {
+        c.libusb_close(self.current_device);
+        self.current_device = null;
+    }
+
     if (c.libusb_open(self.cached_devices[dev.handle], &self.current_device) != 0) {
         return Error.DeviceNoLongerAvailable;
     }
+
+    return try self.cmd_queue.push(.init, 0, 0);
 }
