@@ -1,11 +1,20 @@
 const std = @import("std");
 
+const Error = error{
+    NotFulfilled,
+};
+
 pub fn Promise(comptime T: type) type {
-    const HeapType = struct {
-        value: ?T = null,
-        sema: std.Thread.Semaphore = {},
-    };
     return struct {
+        pub const HeapType = struct {
+            value: ?T = null,
+            sema: std.Thread.Semaphore = {},
+            pub fn fulfill(self: *@This(), val: T) void {
+                self.value = val;
+                self.sema.post();
+            }
+        };
+
         allocator: std.mem.Allocator,
         heap: ?*HeapType = null,
 
@@ -22,12 +31,11 @@ pub fn Promise(comptime T: type) type {
 
         pub fn fulfill(self: @This(), val: T) void {
             if (self.heap == null) return;
-            self.heap.?.value = val;
-            self.heap.?.sema.post();
+            self.heap.?.fulfill(val);
         }
 
-        pub fn wait(self: *@This()) ?T {
-            if (self.heap == null) return null;
+        pub fn wait(self: *@This()) !T {
+            if (self.heap == null) return Error.NotFulfilled;
             self.heap.?.sema.wait();
             const result = self.heap.?.value;
             self.allocator.destroy(self.heap.?);
@@ -35,7 +43,7 @@ pub fn Promise(comptime T: type) type {
             return result.?;
         }
 
-        pub fn poll(self: *@This()) ?T {
+        pub fn poll(self: *@This()) !T {
             if (self.heap == null) return null;
             if (self.heap.?.sema.permits > 0) {
                 const result = self.heap.?.value;

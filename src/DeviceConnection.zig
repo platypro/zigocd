@@ -1,32 +1,36 @@
 const std = @import("std");
+const c = @import("c.zig");
+const JLink = @import("JLink.zig");
 
 const DeviceQueue = @import("DeviceQueue.zig");
 const Promise = @import("Promise.zig").Promise;
 const definitions = @import("definitions.zig");
 
+jlink: JLink,
 allocator: std.mem.Allocator,
 usb_ctx: ?*c.libusb_context,
 cached_devices: [*c]?*c.libusb_device,
 cached_processed_devices: ProcessedDeviceList,
-current_device: ?*c.libusb_device_handle = null,
-evt_thread: std.Thread,
 cmd_queue_thread: std.Thread,
 cmd_queue: DeviceQueue,
-usb_read_buf: []u8,
 exit: c_int,
+current_device: ?*c.libusb_device_handle,
+usb_read_buf: []u8,
+// Cached values for SELECT register
+cached_select: definitions.SELECT,
+cached_select_old: definitions.SELECT,
+
+const usb_buf_size = 0x1000; // 4kb
 
 const Error = error{
     LibUsbError,
     DeviceNoLongerAvailable,
+    InvalidRegister,
+    NoAddr,
+    PacketError,
 };
 
-const usb_buf_size = 0x1000; // 4kb
 const ProcessedDeviceList = std.ArrayList(ChoosableDevice);
-
-const c = @cImport({
-    @cDefine("MIDL_INTERFACE", "struct");
-    @cInclude("libusb.h");
-});
 
 const state = enum {
     unconnected_from_probe,
@@ -48,25 +52,15 @@ const ChoosableDevice = struct {
     };
 };
 
-const JLINK_ENDPOINT_IN = 0x81;
-const JLINK_ENDPOINT_OUT = 0x02;
-
-fn evt_cb(ctx: *@This()) void {
-    while (ctx.exit == 0) {
-        if (c.libusb_handle_events_completed(ctx.usb_ctx, &ctx.exit) != c.LIBUSB_SUCCESS) {
-            return;
-        }
-    }
-}
-
-fn cmd_queue_cb(ctx: *@This()) void {
-    while (ctx.exit == 0) {
-        const instr_opt = ctx.cmd_queue.pop();
+fn cmd_queue_cb(self: *@This()) !void {
+    while (self.exit == 0) {
+        const instr_opt = self.cmd_queue.pop();
         if (instr_opt != null) {
             const instr = instr_opt.?;
             switch (instr.typ) {
                 .none => return,
                 .init => {
+                    try JLink.init(self);
                     instr.promise.fulfill(0);
                 },
                 .read_reg => {},
@@ -88,9 +82,10 @@ pub fn init(allocator: std.mem.Allocator) !*@This() {
     self.cached_devices = null;
     self.current_device = null;
     self.cmd_queue = try DeviceQueue.init(allocator);
-    self.usb_read_buf = try allocator.alloc(u8, usb_buf_size);
-    self.evt_thread = try std.Thread.spawn(.{ .allocator = allocator, .stack_size = 1024 }, evt_cb, .{self});
     self.cmd_queue_thread = try std.Thread.spawn(.{ .allocator = allocator, .stack_size = 1024 }, cmd_queue_cb, .{self});
+    self.cached_select = .{ .APBANKSEL = 0, .APSEL = 0, .DPBANKSEL = 0, .RESERVED0 = 0 };
+    self.cached_select_old = .{ .APBANKSEL = 0, .APSEL = 0, .DPBANKSEL = 0, .RESERVED0 = 1 };
+    self.usb_read_buf = try allocator.alloc(u8, usb_buf_size);
 
     return self;
 }
@@ -101,10 +96,8 @@ pub fn deinit(self: *@This()) void {
         c.libusb_close(self.current_device);
         self.current_device = null;
         self.cmd_queue_thread.join();
-        self.evt_thread.join();
     }
 
-    self.allocator.free(self.usb_read_buf);
     for (self.cached_processed_devices.items) |dev| {
         self.allocator.free(dev.manufacturer_str);
         self.allocator.free(dev.product_str);
@@ -114,58 +107,67 @@ pub fn deinit(self: *@This()) void {
     c.libusb_exit(self.usb_ctx);
     self.usb_ctx = null;
 
+    self.allocator.free(self.usb_read_buf);
     self.allocator.destroy(self);
 }
 
-fn jlink_write_op(self: *@This(), comptime T: type, in: T, dir: T) Promise(T) {
-    const a: c.struct_libusb_transfer = undefined;
-
-    // Fill buffer
-    var instream = std.io.fixedBufferStream(self.usb_read_buf);
-    var writer = instream.writer();
-    var seeker = instream.seekableStream();
-    writer.writeInt(u16, 0x00CD, .little);
-    seeker.seekBy(2);
-    const bit_writer = std.io.bitWriter(.little, instream);
-
-    // Write direction and count bits
-    var num_bits = 0;
+fn u32ToStruct(T: type, val_: u32) !T {
+    var val: [4]u8 = @bitCast(val_);
+    var bufstream = std.io.fixedBufferStream(&val);
+    const reader = bufstream.reader();
+    var bit_reader = std.io.bitReader(.little, reader);
+    var result: T = undefined;
     inline for (@typeInfo(T).Struct.fields) |field| {
-        bit_writer.writeBits(@field(dir, field.name), @TypeOf(field).Int.bits);
-        num_bits = num_bits + @TypeOf(field).Int.bits;
+        var out_bits: usize = 0;
+        @field(result, field.name) = try bit_reader.readBits(field.type, @typeInfo(field.type).Int.bits, &out_bits);
     }
-    bit_writer.flushBits();
-
-    // Write input
-    inline for (@typeInfo(T).Struct.fields) |field| {
-        bit_writer.writeBits(@field(in, field.name), @TypeOf(field).Int.bits);
-    }
-    bit_writer.flushBits();
-
-    const buf_size = instream.getPos();
-
-    // Write size
-    seeker.seekTo(2);
-    writer.writeInt(u16, num_bits, .little);
-
-    const cb = struct {
-        fn cb(xfer: [*c]c.struct_libusb_transfer) callconv(.C) void {
-            var out: T = undefined;
-            const outstream = std.io.fixedBufferStream(xfer.*.buffer);
-            var bit_reader = std.io.bitReader(.little, outstream);
-            inline for (@typeInfo(T).Struct.fields) |field| {
-                bit_writer.writeBits(@field(in, field.name), @TypeOf(field).Int.bits);
-                var out_bits: usize = 0;
-                @field(out, field.name) = try bit_reader.readBits(field.type, @TypeOf(field).Int.bits, &out_bits);
-            }
-        }
-    }.cb;
-
-    const result = Promise(T).init(self.alloc);
-
-    c.libusb_fill_bulk_transfer(&a, self.current_device, JLINK_ENDPOINT_OUT, self.usb_read_buf, buf_size, cb, result.heap, 0);
-
     return result;
+}
+
+fn structToU32(str: anytype) !u32 {
+    var result: [4]u8 = undefined;
+    var bufstream = std.io.fixedBufferStream(&result);
+    const writer = bufstream.writer();
+    var bit_writer = std.io.bitWriter(.big, writer);
+    inline for (@typeInfo(@TypeOf(str)).Struct.fields) |field| {
+        try bit_writer.writeBits(@field(str, field.name), @typeInfo(field.type).Int.bits);
+    }
+    return @bitCast(result);
+}
+
+pub fn update_select_reg(self: *@This(), Reg: type) !definitions.RegisterAddress {
+    if (!@hasDecl(Reg, "addr")) {
+        return Error.NoAddr;
+    }
+    const addr: definitions.RegisterAddress = @field(Reg, "addr");
+    if (addr.BANKSEL != null) {
+        switch (addr.APnDP) {
+            .AP => {
+                self.cached_select.APBANKSEL = addr.BANKSEL.?;
+            },
+            .DP => {
+                self.cached_select.DPBANKSEL = addr.BANKSEL.?;
+            },
+        }
+    }
+    // if (!std.meta.eql(self.cached_select, self.cached_select_old)) {
+    //     _ = try JLink.swd(self, .{ .APnDP = .DP, .RnW = .W, .A = definitions.SELECT.addr.A, .DATA = try structToU32(self.cached_select) });
+    // }
+    return addr;
+}
+
+pub fn select_ap(self: *@This(), id: u8) void {
+    self.cached_select.APSEL = id;
+}
+
+pub fn read_dap_reg(self: *@This(), Reg: type) !Reg {
+    const addr = try self.update_select_reg(Reg);
+    return u32ToStruct(Reg, try JLink.swd(self, .{ .APnDP = addr.APnDP, .RnW = .R, .A = addr.A, .DATA = 0 }));
+}
+
+pub fn write_dap_reg(self: *@This(), Reg: type, value: Reg) !Reg {
+    const addr = try self.update_select_reg(Reg);
+    _ = try JLink.swd(self, .{ .APnDP = addr.APnDP, .RnW = .W, .A = addr.A, .DATA = structToU32(value) });
 }
 
 pub fn read_reg(self: *@This(), addr: u32) Promise(u32) {

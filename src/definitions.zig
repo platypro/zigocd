@@ -1,68 +1,29 @@
-const APnDP = enum(u1) {
-    AP = 1,
-    DP = 0,
+pub const APnDP = enum(u8) {
+    AP = 0b00000010,
+    DP = 0b00000000,
 };
 
-const RnW = enum(u1) {
-    R = 1,
-    W = 0,
+pub const RnW = enum(u8) {
+    R = 0b00000100,
+    W = 0b00000000,
 };
 
-const Perms = enum(u2) {
+pub const A32 = enum(u8) {
+    A00 = 0b00000000,
+    A01 = 0b00001000,
+    A10 = 0b00010000,
+    A11 = 0b00011000,
+};
+
+pub const Perms = enum(u2) {
     RO,
     WO,
     RW,
 };
 
-pub const SwdWriteOp = struct {
-    Start: u1 = 1,
-    APnDP: APnDP,
-    RnW: RnW,
-    A: u2,
-    Parity: u1,
-    Stop: u1 = 0,
-    Park: u1 = 1,
-    Trn1: u1 = 0,
-    Ack: u3 = 0,
-    Trn2: u1 = 0,
-
-    const Dir = SwdWriteOp{
-        .Start = 1, // Out
-        .APnDP = 1, // Out
-        .RnW = 1, // Out
-        .A = 0x3, // Out
-        .Parity = 1, // Out
-        .Stop = 1, // Out
-        .Park = 1, // Out
-        .Trn1 = 0, // Turnaround (In)
-        .Ack = 0, // In
-        .Trn2 = 0, // Turnaround (In)
-    };
-};
-
-pub const SwdReadData = struct {
-    data: u32,
-    parity: u1,
-
-    const Dir = SwdReadData{
-        .data = 0x00000000, // In
-        .parity = 0x0, // In
-    };
-};
-
-pub const SwdWriteData = struct {
-    data: u32,
-    parity: u1,
-
-    const Dir = SwdWriteData{
-        .data = 0xFFFFFFFF, // Out
-        .parity = 0x1, // Out
-    };
-};
-
 pub const RegisterAddress = struct {
     APnDP: APnDP,
-    A: u2,
+    A: A32,
     /// If null, this value is a don't care
     BANKSEL: ?u4,
     perms: Perms,
@@ -76,9 +37,9 @@ pub const DPIDR = struct {
     VERSION: u4,
     DESIGNER: u11,
     RAO: u1,
-    const addr = RegisterAddress{
+    pub const addr = RegisterAddress{
         .APnDP = .DP,
-        .A = 0b00,
+        .A = .A00,
         .BANKSEL = null,
         .perms = .RO,
     };
@@ -106,9 +67,9 @@ pub const ABORT = struct {
     /// In DPv0, this bit is SBO.
     DAPABORT: u1,
 
-    const addr = RegisterAddress{
+    pub const addr = RegisterAddress{
         .APnDP = .DP,
-        .A = 0b00,
+        .A = .A00,
         .BANKSEL = null,
         .perms = .WO,
     };
@@ -137,9 +98,9 @@ pub const CTRL_STAT = packed struct {
     STICKYORUN: u1,
     ORUNDETECT: u1,
 
-    const addr = RegisterAddress{
+    pub const addr = RegisterAddress{
         .APnDP = .DP,
-        .A = 0b10,
+        .A = .A01,
         .BANKSEL = 0,
         .perms = .RW,
     };
@@ -152,9 +113,9 @@ pub const DLCR = struct {
     RESERVED2: u1 = 0b1,
     RESERVED3: u6 = 0,
 
-    const addr = RegisterAddress{
+    pub const addr = RegisterAddress{
         .APnDP = .DP,
-        .A = 0b10,
+        .A = .A01,
         .BANKSEL = 1,
         .perms = .RW,
     };
@@ -166,9 +127,9 @@ pub const TARGETID = struct {
     TDESIGNER: u11,
     RAO: u1,
 
-    const addr = RegisterAddress{
+    pub const addr = RegisterAddress{
         .APnDP = .DP,
-        .A = 0b10,
+        .A = .A01,
         .BANKSEL = 2,
         .perms = .RO,
     };
@@ -179,9 +140,9 @@ pub const DLPIDR = struct {
     RESERVED0: u24 = 0,
     PROTVSN: u4,
 
-    const addr = RegisterAddress{
+    pub const addr = RegisterAddress{
         .APnDP = .DP,
-        .A = 0b10,
+        .A = .A01,
         .BANKSEL = 3,
         .perms = .RO,
     };
@@ -191,9 +152,9 @@ pub const EVENTSTAT = struct {
     RESERVED0: u31,
     EA: u1,
 
-    const addr = RegisterAddress{
+    pub const addr = RegisterAddress{
         .APnDP = .DP,
-        .A = 0b10,
+        .A = .A01,
         .BANKSEL = 4,
         .perms = .RO,
     };
@@ -205,9 +166,9 @@ pub const SELECT = struct {
     APBANKSEL: u4,
     DPBANKSEL: u4,
 
-    const addr = RegisterAddress{
+    pub const addr = RegisterAddress{
         .APnDP = .DP,
-        .A = 0b01,
+        .A = .A10,
         .BANKSEL = null,
         .perms = .WO,
     };
@@ -216,9 +177,9 @@ pub const SELECT = struct {
 pub const RESEND = struct {
     DATA: u32,
 
-    const addr = RegisterAddress{
+    pub const addr = RegisterAddress{
         .APnDP = .DP,
-        .A = 0b01,
+        .A = .A10,
         .BANKSEL = null,
         .perms = .RO,
     };
@@ -227,9 +188,9 @@ pub const RESEND = struct {
 pub const RDBUFF = struct {
     DATA: u32,
 
-    const addr = RegisterAddress{
+    pub const addr = RegisterAddress{
         .APnDP = .DP,
-        .A = 0b11,
+        .A = .A11,
         .BANKSEL = null,
         .perms = .RO,
     };
@@ -241,9 +202,9 @@ pub const TARGETSEL = struct {
     TDESIGNER: u11,
     SBO: u1,
 
-    const addr = RegisterAddress{
+    pub const addr = RegisterAddress{
         .APnDP = .DP,
-        .A = 0b11,
+        .A = .A11,
         .BANKSEL = null,
         .perms = .WO,
     };
@@ -257,9 +218,9 @@ pub const AP_IDR = struct {
     VARIANT: u4,
     TYPE: u4,
 
-    const addr = RegisterAddress{
+    pub const addr = RegisterAddress{
         .APnDP = .AP,
-        .A = 0b11,
+        .A = .A11,
         .BANKSEL = 0b11111,
         .perms = .RO,
     };
@@ -280,9 +241,9 @@ pub const AP_MEM_CSW = struct {
     RESERVED1: u1 = 0,
     Size: u3,
 
-    const addr = RegisterAddress{
+    pub const addr = RegisterAddress{
         .APnDP = .AP,
-        .A = 0b00,
+        .A = .A00,
         .BANKSEL = 0b00000,
         .perms = .RW,
     };
@@ -291,9 +252,9 @@ pub const AP_MEM_CSW = struct {
 pub const AP_MEM_TAR_LO = struct {
     ADDR: u32,
 
-    const addr = RegisterAddress{
+    pub const addr = RegisterAddress{
         .APnDP = .AP,
-        .A = 0b10,
+        .A = .A01,
         .BANKSEL = 0b00000,
         .perms = .RW,
     };
@@ -302,9 +263,9 @@ pub const AP_MEM_TAR_LO = struct {
 pub const AP_MEM_TAR_HI = struct {
     ADDR: u32,
 
-    const addr = RegisterAddress{
+    pub const addr = RegisterAddress{
         .APnDP = .AP,
-        .A = 0b01,
+        .A = .A10,
         .BANKSEL = 0b00000,
         .perms = .RW,
     };
@@ -313,9 +274,9 @@ pub const AP_MEM_TAR_HI = struct {
 pub const AP_MEM_DRW = struct {
     DATA: u32,
 
-    const addr = RegisterAddress{
+    pub const addr = RegisterAddress{
         .APnDP = .AP,
-        .A = 0b11,
+        .A = .A11,
         .BANKSEL = 0b00000,
         .perms = .RW,
     };
@@ -324,9 +285,9 @@ pub const AP_MEM_DRW = struct {
 pub const AP_MEM_BD0 = struct {
     DATA: u32,
 
-    const addr = RegisterAddress{
+    pub const addr = RegisterAddress{
         .APnDP = .AP,
-        .A = 0b00,
+        .A = .A00,
         .BANKSEL = 0b00001,
         .perms = .RW,
     };
@@ -335,9 +296,9 @@ pub const AP_MEM_BD0 = struct {
 pub const AP_MEM_BD1 = struct {
     DATA: u32,
 
-    const addr = RegisterAddress{
+    pub const addr = RegisterAddress{
         .APnDP = .AP,
-        .A = 0b10,
+        .A = .A01,
         .BANKSEL = 0b00001,
         .perms = .RW,
     };
@@ -346,9 +307,9 @@ pub const AP_MEM_BD1 = struct {
 pub const AP_MEM_BD2 = struct {
     DATA: u32,
 
-    const addr = RegisterAddress{
+    pub const addr = RegisterAddress{
         .APnDP = .AP,
-        .A = 0b01,
+        .A = .A10,
         .BANKSEL = 0b00001,
         .perms = .RW,
     };
@@ -357,9 +318,9 @@ pub const AP_MEM_BD2 = struct {
 pub const AP_MEM_BD3 = struct {
     DATA: u32,
 
-    const addr = RegisterAddress{
+    pub const addr = RegisterAddress{
         .APnDP = .AP,
-        .A = 0b11,
+        .A = .A11,
         .BANKSEL = 0b00001,
         .perms = .RW,
     };
@@ -368,9 +329,9 @@ pub const AP_MEM_BD3 = struct {
 pub const AP_MEM_MBT = struct {
     DATA: u32,
 
-    const addr = RegisterAddress{
+    pub const addr = RegisterAddress{
         .APnDP = .AP,
-        .A = 0b00,
+        .A = .A00,
         .BANKSEL = 0b00010,
         .perms = .RW,
     };
@@ -386,9 +347,9 @@ pub const AP_MEM_T0TR = struct {
     T1: u4,
     T0: u4,
 
-    const addr = RegisterAddress{
+    pub const addr = RegisterAddress{
         .APnDP = .AP,
-        .A = 0b00,
+        .A = .A00,
         .BANKSEL = 0b00011,
         .perms = .RW,
     };
@@ -399,9 +360,9 @@ pub const AP_MEM_CFG1 = struct {
     TAG0GRAN: u5,
     TAG0SIZE: u4,
 
-    const addr = RegisterAddress{
+    pub const addr = RegisterAddress{
         .APnDP = .AP,
-        .A = 0b00,
+        .A = .A00,
         .BANKSEL = 0b01110,
         .perms = .RO,
     };
@@ -410,9 +371,9 @@ pub const AP_MEM_CFG1 = struct {
 pub const AP_MEM_BASE_HI = struct {
     BASEADDR_HI: u32,
 
-    const addr = RegisterAddress{
+    pub const addr = RegisterAddress{
         .APnDP = .AP,
-        .A = 0b00,
+        .A = .A00,
         .BANKSEL = 0b01111,
         .perms = .RO,
     };
@@ -424,9 +385,9 @@ pub const AP_MEM_CFG = struct {
     LA: u1,
     BE: u1,
 
-    const addr = RegisterAddress{
+    pub const addr = RegisterAddress{
         .APnDP = .AP,
-        .A = 0b10,
+        .A = .A01,
         .BANKSEL = 0b01111,
         .perms = .RO,
     };
@@ -438,9 +399,9 @@ pub const AP_MEM_CFG_LO = struct {
     FORMAT: u1,
     P: u1,
 
-    const addr = RegisterAddress{
+    pub const addr = RegisterAddress{
         .APnDP = .AP,
-        .A = 0b01,
+        .A = .A10,
         .BANKSEL = 0b01111,
         .perms = .RO,
     };

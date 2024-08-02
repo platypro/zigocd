@@ -1,6 +1,12 @@
 const std = @import("std");
 const DeviceConnection = @import("DeviceConnection.zig");
 const ElfDecoder = @import("ElfDecoder.zig");
+const definitions = @import("definitions.zig");
+
+pub fn panic(msg: []const u8, error_return_trace: ?*std.builtin.StackTrace, ret_addr: ?usize) noreturn {
+    @breakpoint();
+    std.builtin.default_panic(msg, error_return_trace, ret_addr);
+}
 
 const Error = error{
     NoDevice,
@@ -39,5 +45,7 @@ pub fn main() !void {
     }
 
     var dev = try connection.choose_device(devices[0]);
-    _ = dev.wait();
+    _ = try dev.wait();
+
+    //connection.read_dap_reg(definitions.)
 }
