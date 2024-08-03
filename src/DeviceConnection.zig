@@ -128,7 +128,7 @@ fn structToU32(str: anytype) !u32 {
     var result: [4]u8 = undefined;
     var bufstream = std.io.fixedBufferStream(&result);
     const writer = bufstream.writer();
-    var bit_writer = std.io.bitWriter(.big, writer);
+    var bit_writer = std.io.bitWriter(.little, writer);
     inline for (@typeInfo(@TypeOf(str)).Struct.fields) |field| {
         try bit_writer.writeBits(@field(str, field.name), @typeInfo(field.type).Int.bits);
     }
@@ -150,9 +150,9 @@ pub fn update_select_reg(self: *@This(), Reg: type) !definitions.RegisterAddress
             },
         }
     }
-    // if (!std.meta.eql(self.cached_select, self.cached_select_old)) {
-    //     _ = try JLink.swd(self, .{ .APnDP = .DP, .RnW = .W, .A = definitions.SELECT.addr.A, .DATA = try structToU32(self.cached_select) });
-    // }
+    if (addr.BANKSEL != null and !std.meta.eql(self.cached_select, self.cached_select_old)) {
+        _ = try JLink.swd(self, .{ .APnDP = .DP, .RnW = .W, .A = definitions.SELECT.addr.A, .DATA = try structToU32(self.cached_select) });
+    }
     return addr;
 }
 

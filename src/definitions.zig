@@ -30,13 +30,14 @@ pub const RegisterAddress = struct {
 };
 
 pub const DPIDR = struct {
-    REVISION: u4,
-    PARTNO: u8,
-    RESERVED0: u3 = 0,
-    MIN: u1,
-    VERSION: u4,
-    DESIGNER: u11,
     RAO: u1,
+    DESIGNER: u11,
+    VERSION: u4,
+    MIN: u1,
+    RESERVED0: u3 = 0,
+    PARTNO: u8,
+    REVISION: u4,
+
     pub const addr = RegisterAddress{
         .APnDP = .DP,
         .A = .A00,
@@ -107,11 +108,11 @@ pub const CTRL_STAT = packed struct {
 };
 
 pub const DLCR = struct {
-    RESERVED0: u21 = 0,
-    TURNAROUND: u2,
-    RESERVED1: u1 = 0,
-    RESERVED2: u1 = 0b1,
     RESERVED3: u6 = 0,
+    RESERVED2: u1 = 0b1,
+    RESERVED1: u1 = 0,
+    TURNAROUND: u2,
+    RESERVED0: u21 = 0,
 
     pub const addr = RegisterAddress{
         .APnDP = .DP,
@@ -122,10 +123,10 @@ pub const DLCR = struct {
 };
 
 pub const TARGETID = struct {
-    TREVISION: u4,
-    TPARTNO: u16,
-    TDESIGNER: u11,
     RAO: u1,
+    TDESIGNER: u11,
+    TPARTNO: u16,
+    TREVISION: u4,
 
     pub const addr = RegisterAddress{
         .APnDP = .DP,
@@ -136,9 +137,9 @@ pub const TARGETID = struct {
 };
 
 pub const DLPIDR = struct {
-    TINSTANCE: u4,
-    RESERVED0: u24 = 0,
     PROTVSN: u4,
+    RESERVED0: u24 = 0,
+    TINSTANCE: u4,
 
     pub const addr = RegisterAddress{
         .APnDP = .DP,
@@ -149,8 +150,8 @@ pub const DLPIDR = struct {
 };
 
 pub const EVENTSTAT = struct {
-    RESERVED0: u31,
     EA: u1,
+    RESERVED0: u31,
 
     pub const addr = RegisterAddress{
         .APnDP = .DP,
@@ -161,10 +162,10 @@ pub const EVENTSTAT = struct {
 };
 
 pub const SELECT = struct {
-    APSEL: u8,
-    RESERVED0: u16 = 0,
-    APBANKSEL: u4,
     DPBANKSEL: u4,
+    APBANKSEL: u4,
+    RESERVED0: u16 = 0,
+    APSEL: u8,
 
     pub const addr = RegisterAddress{
         .APnDP = .DP,

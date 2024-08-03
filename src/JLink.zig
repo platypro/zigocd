@@ -72,11 +72,15 @@ pub fn init(self: *DeviceConnection) !void {
     try set_speed(self, 3);
     try set_if(self);
     try reset(self);
-    // Clear flags
-    //_ = try swd(self, .{ .APnDP = .DP, .RnW = .W, .A = .A00, .DATA = 0x0000001E });
 
     const tid = try self.read_dap_reg(definitions.DPIDR);
     std.debug.print("Revision:{x}, Partno:{x}, Min:{x} Version:{x} Designer:{x}\n", .{ tid.REVISION, tid.PARTNO, tid.MIN, tid.VERSION, tid.DESIGNER });
+
+    // Clear flags
+    _ = try swd(self, .{ .APnDP = .DP, .RnW = .W, .A = .A00, .DATA = 0x0000001E });
+
+    _ = try self.read_dap_reg(definitions.DLCR);
+
     const tid2 = try self.read_dap_reg(definitions.DPIDR);
     std.debug.print("Revision:{x}, Partno:{x}, Min:{x} Version:{x} Designer:{x}\n", .{ tid2.REVISION, tid2.PARTNO, tid2.MIN, tid2.VERSION, tid2.DESIGNER });
 }
@@ -101,18 +105,27 @@ pub fn reset(self: *DeviceConnection) !void {
 
 pub fn swd(self: *DeviceConnection, info: SwdInfo) !u32 {
     // J-Link is weird
-    // For some reason it puts the turnaround bits at the end of the
-    // complete swd packet when it reports outputs?
+    // For some reason it puts the turnaround bits together
+    // whenever switching to write?
     // Idk it just seems to work this way
 
     var out_stream = std.io.fixedBufferStream(self.usb_read_buf);
     var writer = out_stream.writer();
     try writer.writeInt(u16, 0x00CF, .little); // Command ID
-    try writer.writeInt(u16, 12, .little); // # of Bits (12)
-
-    // Dir
-    try writer.writeByte(0xFF); // CMD
-    try writer.writeByte(0x00); // Spaces for Trn1, ACK
+    switch (info.RnW) {
+        .R => {
+            try writer.writeInt(u16, 11, .little); // # of Bits (cmd+ack)
+            // Dir
+            try writer.writeByte(0xFF); // CMD
+            try writer.writeByte(0x00); // Spaces for ACK
+        },
+        .W => {
+            try writer.writeInt(u16, 13, .little); // # of Bits (cmd+ack+2trn)
+            // Dir
+            try writer.writeByte(0xFF); // CMD
+            try writer.writeByte(0x00); // Spaces for ACK
+        },
+    }
 
     // Out
     var cmd: u8 = 0;
@@ -148,11 +161,11 @@ pub fn swd(self: *DeviceConnection, info: SwdInfo) !u32 {
     writer = out_stream.writer();
 
     try writer.writeInt(u16, @as(u16, 0x00CF), .little); // Command ID
-    try writer.writeInt(u16, @as(u16, 34), .little); // # of Bits (34)
 
     // Dir and Out
     switch (info.RnW) {
         .R => {
+            try writer.writeInt(u16, @as(u16, 35), .little); // # of Bits (data+parity+2trn)
             // Dir
             try writer.writeInt(u32, 0x00000000, .little);
             try writer.writeByte(0x00); // For parity
@@ -161,11 +174,11 @@ pub fn swd(self: *DeviceConnection, info: SwdInfo) !u32 {
             try writer.writeByte(0x00);
         },
         .W => {
+            try writer.writeInt(u16, @as(u16, 33), .little); // # of Bits (data+parity+1trn)
             // Dir
             try writer.writeInt(u32, 0xFFFFFFFF, .little);
             try writer.writeByte(0x01);
             // Out
-            //const shifted_turnaround = info.DATA << 1;
             try writer.writeInt(u32, info.DATA, .little);
             var lastByte: u8 = 0;
             if ((@popCount(info.DATA) & 1) > 0) {
@@ -185,13 +198,12 @@ pub fn swd(self: *DeviceConnection, info: SwdInfo) !u32 {
             var in_stream = std.io.fixedBufferStream(self.usb_read_buf);
             const reader = in_stream.reader();
             const result = try reader.readInt(u32, .little);
-            std.debug.print("Result:{x}\n", .{result});
             return result;
         },
         .W => {
-            try xfer_usb(self, 12, 5);
+            try xfer_usb(self, 14, 6);
 
-            if (self.usb_read_buf[4] != 0) {
+            if (self.usb_read_buf[5] != 0) {
                 return Error.JLink;
             }
             return 0;
