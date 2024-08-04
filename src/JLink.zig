@@ -188,24 +188,20 @@ pub fn swd(self: *DeviceConnection, info: SwdInfo) !u32 {
         },
     }
 
+    try xfer_usb(self, 14, 6);
+
+    if (self.usb_read_buf[5] != 0) {
+        return Error.JLink;
+    }
+
     switch (info.RnW) {
         .R => {
-            try xfer_usb(self, 14, 6);
-
-            if (self.usb_read_buf[5] != 0) {
-                return Error.JLink;
-            }
             var in_stream = std.io.fixedBufferStream(self.usb_read_buf);
             const reader = in_stream.reader();
             const result = try reader.readInt(u32, .little);
             return result;
         },
         .W => {
-            try xfer_usb(self, 14, 6);
-
-            if (self.usb_read_buf[5] != 0) {
-                return Error.JLink;
-            }
             return 0;
         },
     }
