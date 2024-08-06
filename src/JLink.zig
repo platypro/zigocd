@@ -7,11 +7,9 @@ const DeviceConnection = @import("DeviceConnection.zig");
 const JLINK_ENDPOINT_IN = 0x81;
 const JLINK_ENDPOINT_OUT = 0x02;
 
-const Error = error{
-    SwdWait,
+pub const Error = error{
     SwdFault,
-    SwdOther,
-    JLink,
+    NeedReset,
 };
 
 pub const SwdInfo = struct {
@@ -28,14 +26,14 @@ fn xfer_usb(self: *DeviceConnection, out: usize, in: usize) !void {
     while (out_cnt != 0) {
         _ = c.libusb_bulk_transfer(self.current_device, JLINK_ENDPOINT_OUT, self.usb_read_buf.ptr + (out - @as(usize, @intCast(out_cnt))), out_cnt, &actual_len, 1000);
         if (actual_len == 0) {
-            return Error.JLink;
+            return Error.NeedReset;
         }
         out_cnt -= actual_len;
     }
     while (in_cnt != 0) {
         _ = c.libusb_bulk_transfer(self.current_device, JLINK_ENDPOINT_IN, self.usb_read_buf.ptr + (in - @as(usize, @intCast(in_cnt))), in_cnt, &actual_len, 1000);
         if (actual_len == 0) {
-            return Error.JLink;
+            return Error.NeedReset;
         }
         in_cnt -= actual_len;
     }
@@ -71,21 +69,9 @@ pub fn init(self: *DeviceConnection) !void {
     try reset_device(self);
     try set_speed(self, 3);
     try set_if(self);
-    try reset(self);
-
-    const tid = try self.read_dap_reg(definitions.DPIDR);
-    std.debug.print("Revision:{x}, Partno:{x}, Min:{x} Version:{x} Designer:{x}\n", .{ tid.REVISION, tid.PARTNO, tid.MIN, tid.VERSION, tid.DESIGNER });
-
-    // Clear flags
-    _ = try swd(self, .{ .APnDP = .DP, .RnW = .W, .A = .A00, .DATA = 0x0000001E });
-
-    _ = try self.read_dap_reg(definitions.DLCR);
-
-    const tid2 = try self.read_dap_reg(definitions.DPIDR);
-    std.debug.print("Revision:{x}, Partno:{x}, Min:{x} Version:{x} Designer:{x}\n", .{ tid2.REVISION, tid2.PARTNO, tid2.MIN, tid2.VERSION, tid2.DESIGNER });
 }
 
-pub fn reset(self: *DeviceConnection) !void {
+pub fn swd_reset(self: *DeviceConnection) !void {
     var out_stream = std.io.fixedBufferStream(self.usb_read_buf);
     const writer = out_stream.writer();
 
@@ -104,101 +90,103 @@ pub fn reset(self: *DeviceConnection) !void {
 }
 
 pub fn swd(self: *DeviceConnection, info: SwdInfo) !u32 {
-    // J-Link is weird
-    // For some reason it puts the turnaround bits together
-    // whenever switching to write?
-    // Idk it just seems to work this way
+    // JLink automatically ignores turnarounds when filling the read field,
+    // but needs them still on the write field
+    self.usb_read_buf[2] = 0b00000010;
+    while (self.usb_read_buf[2] == 0b00000010) {
+        var out_stream = std.io.fixedBufferStream(self.usb_read_buf);
+        var writer = out_stream.writer();
+        var bit_writer = std.io.bitWriter(.little, writer);
+        try writer.writeInt(u16, 0x00CF, .little); // Command ID
+        switch (info.RnW) {
+            .R => { // Length
+                try writer.writeInt(u16, 54, .little); // # of Bits (cmd+ack+data+parity)
+            },
+            .W => {
+                try writer.writeInt(u16, 54, .little); // # of Bits (cmd+ack+data+parity + 2????)
+            },
+        }
 
-    var out_stream = std.io.fixedBufferStream(self.usb_read_buf);
-    var writer = out_stream.writer();
-    try writer.writeInt(u16, 0x00CF, .little); // Command ID
-    switch (info.RnW) {
-        .R => {
-            try writer.writeInt(u16, 11, .little); // # of Bits (cmd+ack)
-            // Dir
-            try writer.writeByte(0xFF); // CMD
-            try writer.writeByte(0x00); // Spaces for ACK
-        },
-        .W => {
-            try writer.writeInt(u16, 13, .little); // # of Bits (cmd+ack+2trn)
-            // Dir
-            try writer.writeByte(0xFF); // CMD
-            try writer.writeByte(0x00); // Spaces for ACK
-        },
+        // Dir
+        try writer.writeByte(0xFF); // Idle
+        try writer.writeByte(0xFF); // CMD
+        try bit_writer.writeBits(@as(u32, 0x00), 3); // Spaces for ACK
+        switch (info.RnW) {
+            .R => { // Dir
+                try bit_writer.writeBits(@as(u32, 0x00), 32); // Data
+                try bit_writer.writeBits(@as(u32, 0x06), 3); // Parity + 2trn
+            },
+            .W => {
+                // Dir
+                try bit_writer.writeBits(@as(u32, 0x00), 2); // +2?
+                try bit_writer.writeBits(@as(u32, 0xFFFFFFFF), 32); // Data
+                try bit_writer.writeBits(@as(u32, 0x07), 3); // Parity
+            },
+        }
+
+        try bit_writer.flushBits();
+
+        // Out
+        var cmd: u8 = 0;
+        cmd |= @intFromEnum(info.APnDP);
+        cmd |= @intFromEnum(info.RnW);
+        cmd |= @intFromEnum(info.A);
+
+        // Parity
+        if ((@popCount(cmd) & 1) > 0) {
+            cmd |= 0b00100000;
+        }
+
+        // Add Start and Park
+        cmd |= 0b10000001;
+
+        try writer.writeByte(0x00); // IDLE
+        try writer.writeByte(cmd); // CMD
+        try bit_writer.writeBits(@as(u32, 0x00), 3); // Spaces for ACK
+
+        switch (info.RnW) {
+            .R => {
+                // Out
+                try bit_writer.writeBits(@as(u32, 0x00), 32); // Data
+                try bit_writer.writeBits(@as(u32, 0x00), 3); // Parity
+            },
+            .W => {
+                // Out
+                try bit_writer.writeBits(@as(u32, 0), 2);
+                try bit_writer.writeBits(@as(u8, @truncate(info.DATA)), 8);
+                try bit_writer.writeBits(@as(u8, @truncate(info.DATA >> 8)), 8);
+                try bit_writer.writeBits(@as(u8, @truncate(info.DATA >> 16)), 8);
+                try bit_writer.writeBits(@as(u8, @truncate(info.DATA >> 24)), 8);
+                if ((@popCount(info.DATA) & 1) > 0) {
+                    try bit_writer.writeBits(@as(u32, 1), 3);
+                } else {
+                    try bit_writer.writeBits(@as(u32, 0), 3);
+                }
+            },
+        }
+
+        try bit_writer.flushBits();
+
+        try xfer_usb(self, 18, 8);
+
+        if (self.usb_read_buf[7] != 0) {
+            return Error.NeedReset;
+        } else if ((self.usb_read_buf[2] & 7) == 1) { // Continue
+        } else if ((self.usb_read_buf[2] & 7) == 2) { // Continue
+        } else if ((self.usb_read_buf[2] & 7) == 4) {
+            return Error.SwdFault;
+        } else return Error.NeedReset;
     }
 
-    // Out
-    var cmd: u8 = 0;
-    cmd |= @intFromEnum(info.APnDP);
-    cmd |= @intFromEnum(info.RnW);
-    cmd |= @intFromEnum(info.A);
-
-    // Parity
-    if ((@popCount(cmd) & 1) > 0) {
-        cmd |= 0b00100000;
-    }
-
-    // Add Start and Park
-    cmd |= 0b10000001;
-
-    try writer.writeByte(cmd); // CMD
-    try writer.writeByte(0x00); // Spaces for Trn1, ACK
-
-    try xfer_usb(self, 8, 3);
-
-    if (self.usb_read_buf[2] != 0) {
-        return Error.JLink;
-    }
-    if ((self.usb_read_buf[1] & 0b00000100) > 0) {
-        return Error.SwdWait;
-    }
-    if ((self.usb_read_buf[1] & 0b00000010) > 0) {
-        return Error.SwdFault;
-    }
-
-    // Now handle the data
-    out_stream = std.io.fixedBufferStream(self.usb_read_buf);
-    writer = out_stream.writer();
-
-    try writer.writeInt(u16, @as(u16, 0x00CF), .little); // Command ID
-
-    // Dir and Out
-    switch (info.RnW) {
-        .R => {
-            try writer.writeInt(u16, @as(u16, 35), .little); // # of Bits (data+parity+2trn)
-            // Dir
-            try writer.writeInt(u32, 0x00000000, .little);
-            try writer.writeByte(0x00); // For parity
-            // Out
-            try writer.writeInt(u32, 0, .little);
-            try writer.writeByte(0x00);
-        },
-        .W => {
-            try writer.writeInt(u16, @as(u16, 33), .little); // # of Bits (data+parity+1trn)
-            // Dir
-            try writer.writeInt(u32, 0xFFFFFFFF, .little);
-            try writer.writeByte(0x01);
-            // Out
-            try writer.writeInt(u32, info.DATA, .little);
-            var lastByte: u8 = 0;
-            if ((@popCount(info.DATA) & 1) > 0) {
-                lastByte |= 0x1;
-            }
-            try writer.writeByte(lastByte);
-        },
-    }
-
-    try xfer_usb(self, 14, 6);
-
-    if (self.usb_read_buf[5] != 0) {
-        return Error.JLink;
-    }
-
+    // Handle data in
     switch (info.RnW) {
         .R => {
             var in_stream = std.io.fixedBufferStream(self.usb_read_buf);
             const reader = in_stream.reader();
-            const result = try reader.readInt(u32, .little);
+            var bit_reader = std.io.bitReader(.little, reader);
+            var out_bits: usize = 0;
+            _ = try bit_reader.readBits(u32, 19, &out_bits);
+            const result = try bit_reader.readBits(u32, 32, &out_bits);
             return result;
         },
         .W => {

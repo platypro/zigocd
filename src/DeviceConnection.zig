@@ -30,6 +30,13 @@ const Error = error{
     PacketError,
 };
 
+const SwdError = error{
+    WDATA,
+    STICKYERR,
+    STICKYCMP,
+    STICKYORUN,
+};
+
 const ProcessedDeviceList = std.ArrayList(ChoosableDevice);
 
 const state = enum {
@@ -61,6 +68,31 @@ fn cmd_queue_cb(self: *@This()) !void {
                 .none => return,
                 .init => {
                     try JLink.init(self);
+                    try JLink.swd_reset(self);
+
+                    // Read and report DPIDR register to leave reset
+                    const tid = try self.read_dap_reg(definitions.DPIDR);
+                    std.debug.print("Revision:{x}, Partno:{x}, Min:{x} Version:{x} Designer:{x}\n", .{ tid.REVISION, tid.PARTNO, tid.MIN, tid.VERSION, tid.DESIGNER });
+
+                    // Clear error flags
+                    _ = try JLink.swd(self, .{ .APnDP = .DP, .RnW = .W, .A = .A00, .DATA = 0x0000001E });
+
+                    // Power up system and DP
+                    var ctrl_stat = try self.read_dap_reg(definitions.CTRL_STAT);
+                    ctrl_stat.CDBGPWRUPREQ = 1;
+                    ctrl_stat.CSYSPWRUPREQ = 1;
+                    ctrl_stat.ORUNDETECT = 1;
+                    try self.write_dap_reg(definitions.CTRL_STAT, ctrl_stat);
+                    //try self.write_dap_reg(definitions.CTRL_STAT, ctrl_stat);
+
+                    //while (ctrl_stat.CSYSPWRUPACK == 0 and ctrl_stat.CDBGPWRUPACK == 0) {
+
+                    while (ctrl_stat.CDBGPWRUPACK != 1) {
+                        ctrl_stat = try self.read_dap_reg(definitions.CTRL_STAT);
+                        //std.debug.print("SysAck:{x} DbgAck:{x}\n", .{ ctrl_stat.CSYSPWRUPACK, ctrl_stat.CDBGPWRUPACK });
+                    }
+                    //}
+
                     instr.promise.fulfill(0);
                 },
                 .read_reg => {},
@@ -152,22 +184,59 @@ pub fn update_select_reg(self: *@This(), Reg: type) !definitions.RegisterAddress
     }
     if (addr.BANKSEL != null and !std.meta.eql(self.cached_select, self.cached_select_old)) {
         _ = try JLink.swd(self, .{ .APnDP = .DP, .RnW = .W, .A = definitions.SELECT.addr.A, .DATA = try structToU32(self.cached_select) });
+        self.cached_select_old = self.cached_select;
     }
     return addr;
 }
+
+const AP = struct {
+    typ: enum {
+        mem,
+        other,
+    },
+    id: u8,
+};
 
 pub fn select_ap(self: *@This(), id: u8) void {
     self.cached_select.APSEL = id;
 }
 
-pub fn read_dap_reg(self: *@This(), Reg: type) !Reg {
-    const addr = try self.update_select_reg(Reg);
-    return u32ToStruct(Reg, try JLink.swd(self, .{ .APnDP = addr.APnDP, .RnW = .R, .A = addr.A, .DATA = 0 }));
+pub fn query_aps(self: *@This()) ![]AP {
+    for (0..255) |i| {
+        self.select_ap(@intCast(i));
+        const idr = self.read_dap_reg(definitions.AP_IDR) catch {
+            // Clear error flags
+            _ = try JLink.swd(self, .{ .APnDP = .DP, .RnW = .W, .A = .A00, .DATA = 0x0000001E });
+
+            break;
+        };
+
+        if (try structToU32(idr) == 0) {
+            break;
+        }
+        std.debug.print("Class:{x} Designer:{x} Revision:{x} TYPE:{x} Variant:{x}\n", .{ idr.CLASS, idr.DESIGNER, idr.REVISION, idr.TYPE, idr.VARIANT });
+    }
+    return &.{};
 }
 
-pub fn write_dap_reg(self: *@This(), Reg: type, value: Reg) !Reg {
+pub fn read_dap_reg(self: *@This(), Reg: type) !Reg {
     const addr = try self.update_select_reg(Reg);
-    _ = try JLink.swd(self, .{ .APnDP = addr.APnDP, .RnW = .W, .A = addr.A, .DATA = structToU32(value) });
+    var val: u32 = undefined;
+    switch (addr.APnDP) {
+        .AP => {
+            _ = try JLink.swd(self, .{ .APnDP = addr.APnDP, .RnW = .R, .A = addr.A, .DATA = 0 });
+            val = try JLink.swd(self, .{ .APnDP = definitions.RDBUFF.addr.APnDP, .RnW = .R, .A = definitions.RDBUFF.addr.A, .DATA = 0 });
+        },
+        .DP => {
+            val = try JLink.swd(self, .{ .APnDP = addr.APnDP, .RnW = .R, .A = addr.A, .DATA = 0 });
+        },
+    }
+    return u32ToStruct(Reg, val);
+}
+
+pub fn write_dap_reg(self: *@This(), Reg: type, value: Reg) !void {
+    const addr = try self.update_select_reg(Reg);
+    _ = try JLink.swd(self, .{ .APnDP = addr.APnDP, .RnW = .W, .A = addr.A, .DATA = try structToU32(value) });
 }
 
 pub fn read_reg(self: *@This(), addr: u32) Promise(u32) {

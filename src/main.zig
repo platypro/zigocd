@@ -44,8 +44,8 @@ pub fn main() !void {
         return;
     }
 
-    var dev = try connection.choose_device(devices[0]);
-    _ = try dev.wait();
+    var dev_promise = try connection.choose_device(devices[0]);
+    _ = try dev_promise.wait();
 
-    //connection.read_dap_reg(definitions.)
+    _ = try connection.query_aps();
 }

@@ -47,26 +47,12 @@ pub const DPIDR = struct {
 };
 
 pub const ABORT = struct {
-    ///Reserved, SBZ.
-    RESERVED0: u28 = 0,
-
-    /// To clear the CTRL/STAT.STICKYORUN overrun error bit to 0b0 , write 0b1 to this bit.
-    ORUNERRCLR: u1,
-
-    /// To clear the CTRL/STAT.WDATAERR write data error bit to 0b0, write 0b1 to this bit.
-    WDERRCLR: u1,
-
-    /// To clear the CTRL/STAT.STICKYERR sticky error bit to 0b0, write 0b1 to this bit.
-    STKERRCLR: u1,
-
-    /// To clear the CTRL/STAT.STICKYCMP sticky compare bit to 0b0, write 0b1 to this bit. It is
-    /// IMPLEMENTATION DEFINED whether the CTRL/STAT.STICKYCMP bit is implemented.
-    STKCMPCLR: u1,
-
-    /// To generate a DAP abort, which aborts the current AP transaction, write 0b1 to this bit.
-    /// Do this write only if the debugger has received WAIT responses over an extended period.
-    /// In DPv0, this bit is SBO.
     DAPABORT: u1,
+    STKCMPCLR: u1,
+    STKERRCLR: u1,
+    WDERRCLR: u1,
+    ORUNERRCLR: u1,
+    RESERVED0: u28 = 0,
 
     pub const addr = RegisterAddress{
         .APnDP = .DP,
@@ -77,27 +63,22 @@ pub const ABORT = struct {
 };
 
 pub const CTRL_STAT = packed struct {
-    CSYSPWRUPACK: u1,
-    CSYSPWRUPREQ: u1,
-    CDBGPWRUPACK: u1,
-    CDBGPWRUPREQ: u1,
-    CDBGRSTACK: u1,
-    CDBGRSTREQ: u1,
-    RESERVED0: u2 = 0,
-    TRNCNT: u12,
-    MASKLANE: u4,
-    WDATAERR: u1,
-    READOK: u1,
-    STICKYERR: u1,
-    STICKYCMP: u1,
-    TRNMODE: enum(u2) {
-        normal_operation = 0b00,
-        pushed_verify = 0b01,
-        pushed_compare = 0b10,
-        reserved0 = 0b11,
-    },
-    STICKYORUN: u1,
     ORUNDETECT: u1,
+    STICKYORUN: u1,
+    TRNMODE: u2,
+    STICKYCMP: u1,
+    STICKYERR: u1,
+    READOK: u1,
+    WDATAERR: u1,
+    MASKLANE: u4,
+    TRNCNT: u12,
+    RESERVED0: u2 = 0,
+    CDBGRSTREQ: u1,
+    CDBGRSTACK: u1,
+    CDBGPWRUPREQ: u1,
+    CDBGPWRUPACK: u1,
+    CSYSPWRUPREQ: u1,
+    CSYSPWRUPACK: u1,
 
     pub const addr = RegisterAddress{
         .APnDP = .DP,
@@ -198,10 +179,10 @@ pub const RDBUFF = struct {
 };
 
 pub const TARGETSEL = struct {
-    TINSTANCE: u4,
-    TPARTNO: u16,
+    SBO: u1 = 0b1,
     TDESIGNER: u11,
-    SBO: u1,
+    TPARTNO: u16,
+    TINSTANCE: u4,
 
     pub const addr = RegisterAddress{
         .APnDP = .DP,
@@ -212,17 +193,17 @@ pub const TARGETSEL = struct {
 };
 
 pub const AP_IDR = struct {
-    REVISION: u4,
-    DESIGNER: u11,
-    CLASS: u4,
-    RESERVED0: u5 = 0,
-    VARIANT: u4,
     TYPE: u4,
+    VARIANT: u4,
+    RESERVED0: u5 = 0,
+    CLASS: u4,
+    DESIGNER: u11,
+    REVISION: u4,
 
     pub const addr = RegisterAddress{
         .APnDP = .AP,
         .A = .A11,
-        .BANKSEL = 0b11111,
+        .BANKSEL = 0b1111,
         .perms = .RO,
     };
 };
@@ -245,7 +226,7 @@ pub const AP_MEM_CSW = struct {
     pub const addr = RegisterAddress{
         .APnDP = .AP,
         .A = .A00,
-        .BANKSEL = 0b00000,
+        .BANKSEL = 0b0000,
         .perms = .RW,
     };
 };
@@ -256,7 +237,7 @@ pub const AP_MEM_TAR_LO = struct {
     pub const addr = RegisterAddress{
         .APnDP = .AP,
         .A = .A01,
-        .BANKSEL = 0b00000,
+        .BANKSEL = 0b0000,
         .perms = .RW,
     };
 };
@@ -267,7 +248,7 @@ pub const AP_MEM_TAR_HI = struct {
     pub const addr = RegisterAddress{
         .APnDP = .AP,
         .A = .A10,
-        .BANKSEL = 0b00000,
+        .BANKSEL = 0b0000,
         .perms = .RW,
     };
 };
@@ -278,7 +259,7 @@ pub const AP_MEM_DRW = struct {
     pub const addr = RegisterAddress{
         .APnDP = .AP,
         .A = .A11,
-        .BANKSEL = 0b00000,
+        .BANKSEL = 0b0000,
         .perms = .RW,
     };
 };
@@ -289,7 +270,7 @@ pub const AP_MEM_BD0 = struct {
     pub const addr = RegisterAddress{
         .APnDP = .AP,
         .A = .A00,
-        .BANKSEL = 0b00001,
+        .BANKSEL = 0b0001,
         .perms = .RW,
     };
 };
@@ -300,7 +281,7 @@ pub const AP_MEM_BD1 = struct {
     pub const addr = RegisterAddress{
         .APnDP = .AP,
         .A = .A01,
-        .BANKSEL = 0b00001,
+        .BANKSEL = 0b0001,
         .perms = .RW,
     };
 };
@@ -311,7 +292,7 @@ pub const AP_MEM_BD2 = struct {
     pub const addr = RegisterAddress{
         .APnDP = .AP,
         .A = .A10,
-        .BANKSEL = 0b00001,
+        .BANKSEL = 0b0001,
         .perms = .RW,
     };
 };
@@ -322,7 +303,7 @@ pub const AP_MEM_BD3 = struct {
     pub const addr = RegisterAddress{
         .APnDP = .AP,
         .A = .A11,
-        .BANKSEL = 0b00001,
+        .BANKSEL = 0b0001,
         .perms = .RW,
     };
 };
@@ -333,7 +314,7 @@ pub const AP_MEM_MBT = struct {
     pub const addr = RegisterAddress{
         .APnDP = .AP,
         .A = .A00,
-        .BANKSEL = 0b00010,
+        .BANKSEL = 0b0010,
         .perms = .RW,
     };
 };
@@ -351,7 +332,7 @@ pub const AP_MEM_T0TR = struct {
     pub const addr = RegisterAddress{
         .APnDP = .AP,
         .A = .A00,
-        .BANKSEL = 0b00011,
+        .BANKSEL = 0b0011,
         .perms = .RW,
     };
 };
@@ -364,7 +345,7 @@ pub const AP_MEM_CFG1 = struct {
     pub const addr = RegisterAddress{
         .APnDP = .AP,
         .A = .A00,
-        .BANKSEL = 0b01110,
+        .BANKSEL = 0b1110,
         .perms = .RO,
     };
 };
@@ -375,7 +356,7 @@ pub const AP_MEM_BASE_HI = struct {
     pub const addr = RegisterAddress{
         .APnDP = .AP,
         .A = .A00,
-        .BANKSEL = 0b01111,
+        .BANKSEL = 0b1111,
         .perms = .RO,
     };
 };
@@ -389,7 +370,7 @@ pub const AP_MEM_CFG = struct {
     pub const addr = RegisterAddress{
         .APnDP = .AP,
         .A = .A01,
-        .BANKSEL = 0b01111,
+        .BANKSEL = 0b1111,
         .perms = .RO,
     };
 };
@@ -403,7 +384,7 @@ pub const AP_MEM_CFG_LO = struct {
     pub const addr = RegisterAddress{
         .APnDP = .AP,
         .A = .A10,
-        .BANKSEL = 0b01111,
+        .BANKSEL = 0b1111,
         .perms = .RO,
     };
 };
