@@ -1,12 +1,12 @@
 const std = @import("std");
-const DeviceConnection = @import("DeviceConnection.zig");
-const ElfDecoder = @import("ElfDecoder.zig");
-const definitions = @import("definitions.zig");
 
-pub fn panic(msg: []const u8, error_return_trace: ?*std.builtin.StackTrace, ret_addr: ?usize) noreturn {
-    @breakpoint();
-    std.builtin.default_panic(msg, error_return_trace, ret_addr);
-}
+const libcxmdb = @import("libcxmdb");
+const ElfDecoder = @import("ElfDecoder.zig");
+
+// pub fn panic(msg: []const u8, error_return_trace: ?*std.builtin.StackTrace, ret_addr: ?usize) noreturn {
+//     @breakpoint();
+//     std.builtin.default_panic(msg, error_return_trace, ret_addr);
+// }
 
 const Error = error{
     NoDevice,
@@ -35,17 +35,37 @@ pub fn main() !void {
         std.debug.print("VMA:{}, LMA:{}, Size:{}\n", .{ load_map.vma, load_map.lma, load_map.size });
     }
 
-    var connection = try DeviceConnection.init(allocator);
-    defer connection.deinit();
-    const devices = try connection.get_devices();
+    var debugger: libcxmdb = undefined;
+    try debugger.init(allocator);
+    defer debugger.deinit();
 
-    if (devices.len == 0) {
-        std.debug.print("No Devices!\n", .{});
-        return;
-    }
+    const node = debugger.getRootNode();
+    const usb = try node.getApi(.usb);
+    const jlink = try debugger.spawnNode(.jlink);
+    jlink.transport = usb;
 
-    var dev_promise = try connection.choose_device(devices[0]);
-    _ = try dev_promise.wait();
+    const swd = try jlink.getApi(.swd);
+    const samd51 = try debugger.spawnNode(.samd51);
+    samd51.transport = swd;
 
-    _ = try connection.query_aps();
+    try libcxmdb.Node.getClass(.jlink).connect_to_first(jlink);
+
+    // This will go into samd51 eventually
+    try libcxmdb.API.getClass(.swd).setup_connection(swd);
+
+    //node.
+
+    // var connection = try DeviceConnection.init(allocator);
+    // defer connection.deinit();
+    // const devices = try connection.get_devices();
+
+    // if (devices.len == 0) {
+    //     std.debug.print("No Devices!\n", .{});
+    //     return;
+    // }
+
+    // var dev_promise = try connection.choose_device(devices[0]);
+    // _ = try dev_promise.wait();
+
+    _ = try libcxmdb.API.getClass(.swd).query_aps(swd);
 }
