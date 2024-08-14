@@ -49,23 +49,5 @@ pub fn main() !void {
     samd51.transport = swd;
 
     try libcxmdb.Node.getClass(.jlink).connect_to_first(jlink);
-
-    // This will go into samd51 eventually
-    try libcxmdb.API.getClass(.swd).setup_connection(swd);
-
-    //node.
-
-    // var connection = try DeviceConnection.init(allocator);
-    // defer connection.deinit();
-    // const devices = try connection.get_devices();
-
-    // if (devices.len == 0) {
-    //     std.debug.print("No Devices!\n", .{});
-    //     return;
-    // }
-
-    // var dev_promise = try connection.choose_device(devices[0]);
-    // _ = try dev_promise.wait();
-
-    _ = try libcxmdb.API.getClass(.swd).query_aps(swd);
+    try libcxmdb.Node.getClass(.samd51).connect(samd51);
 }
