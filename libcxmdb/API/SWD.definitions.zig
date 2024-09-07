@@ -209,19 +209,19 @@ pub const AP_IDR = struct {
 };
 
 pub const AP_MEM_CSW = struct {
-    DBGSWENABLE: u1,
-    PROT: u7,
-    SPIDEN: u1,
-    RESERVED0: u7 = 0,
+    Size: u3,
+    RESERVED1: u1 = 0,
+    ADDRINC: u2,
+    DEVICEEN: u1,
+    TRINPROG: u1,
+    MODE: u4,
+    TYPE: u3,
     /// If memory tagging control is not implemented, this is bit 5 of TYPE
     MTE: u1,
-    TYPE: u3,
-    MODE: u4,
-    TRINPROG: u1,
-    DEVICEEN: u1,
-    ADDRINC: u2,
-    RESERVED1: u1 = 0,
-    Size: u3,
+    RESERVED0: u7 = 0,
+    SPIDEN: u1,
+    PROT: u7,
+    DBGSWENABLE: u1,
 
     pub const addr = RegisterAddress{
         .APnDP = .AP,
@@ -320,14 +320,14 @@ pub const AP_MEM_MBT = struct {
 };
 
 pub const AP_MEM_T0TR = struct {
-    T7: u4,
-    T6: u4,
-    T5: u4,
-    T4: u4,
-    T3: u4,
-    T2: u4,
-    T1: u4,
     T0: u4,
+    T1: u4,
+    T2: u4,
+    T3: u4,
+    T4: u4,
+    T5: u4,
+    T6: u4,
+    T7: u4,
 
     pub const addr = RegisterAddress{
         .APnDP = .AP,
@@ -338,9 +338,9 @@ pub const AP_MEM_T0TR = struct {
 };
 
 pub const AP_MEM_CFG1 = struct {
-    RESERVED0: u23,
-    TAG0GRAN: u5,
     TAG0SIZE: u4,
+    TAG0GRAN: u5,
+    RESERVED0: u23,
 
     pub const addr = RegisterAddress{
         .APnDP = .AP,
@@ -362,10 +362,10 @@ pub const AP_MEM_BASE_HI = struct {
 };
 
 pub const AP_MEM_CFG = struct {
-    RESERVED0: u29,
-    LD: u1,
-    LA: u1,
     BE: u1,
+    LA: u1,
+    LD: u1,
+    RESERVED0: u29,
 
     pub const addr = RegisterAddress{
         .APnDP = .AP,
@@ -376,10 +376,10 @@ pub const AP_MEM_CFG = struct {
 };
 
 pub const AP_MEM_CFG_LO = struct {
-    BASEADDR_LO: u20,
-    RESERVED0: u10,
-    FORMAT: u1,
     P: u1,
+    FORMAT: u1,
+    RESERVED0: u10,
+    BASEADDR_LO: u20,
 
     pub const addr = RegisterAddress{
         .APnDP = .AP,

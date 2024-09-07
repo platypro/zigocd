@@ -74,21 +74,21 @@ pub fn build(b: *std.Build) void {
     const run_step = b.step("run", "Run the app");
     run_step.dependOn(&run_cmd.step);
 
-    const mz = microzig.init(b, .{});
-    const test_firmware = mz.add_firmware(
-        b,
-        .{
-            .name = "test_firmware",
-            .target = microzig_atsam.chips.atsamd51j19,
-            .optimize = optimize,
-            .root_source_file = b.path("test_firmware/source.zig"),
-        },
-    );
-    const test_firmware_install = b.addInstallFileWithDir(
-        test_firmware.artifact.getEmittedBin(),
-        .bin,
-        "test_firmware.elf",
-    );
-    b.getInstallStep().dependOn(&test_firmware_install.step);
+    // const mz = microzig.init(b, .{});
+    // const test_firmware = mz.add_firmware(
+    //     b,
+    //     .{
+    //         .name = "test_firmware",
+    //         .target = microzig_atsam.chips.atsamd51j19,
+    //         .optimize = optimize,
+    //         .root_source_file = b.path("test_firmware/source.zig"),
+    //     },
+    // );
+    // const test_firmware_install = b.addInstallFileWithDir(
+    //     test_firmware.artifact.getEmittedBin(),
+    //     .bin,
+    //     "test_firmware.elf",
+    // );
+    // b.getInstallStep().dependOn(&test_firmware_install.step);
     //    mz.install_firmware(b, test_firmware, .{ .format = .elf });
 }

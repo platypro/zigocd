@@ -27,6 +27,10 @@ const InitDeinit = struct {
     deinit: []const DeinitType,
 };
 
+const Error = error{
+    NoTransport,
+};
+
 allocator: std.mem.Allocator,
 id: node_enum,
 user_data: ?node_union,
@@ -123,7 +127,7 @@ pub fn register_api(self: *@This(), comptime typ: API.api_enum, vtable: API.api_
     api.vtable = vtable;
     api.type = typ;
 
-    try API.api_init_deinit.init[@intFromEnum(typ)](api);
+    try API.api_init_deinit.init[@intFromEnum(typ) -| 1](api);
     try self.apis.put(self.allocator, typ, api);
 }
 
@@ -142,4 +146,12 @@ pub fn getContext(self: @This(), comptime typ: node_enum) !*nodes[@intFromEnum(t
 
 pub fn getClass(comptime typ: node_enum) type {
     return nodes[@intFromEnum(typ)];
+}
+
+pub fn getTransportVTable(self: @This()) API.api_vtable_union {
+    const api_null_union = API.api_vtable_union{ .null = {} };
+    if (self.transport == null) {
+        return api_null_union;
+    }
+    return self.transport.?.vtable;
 }

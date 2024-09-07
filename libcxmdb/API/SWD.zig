@@ -1,12 +1,12 @@
+const std = @import("std");
+const cxmdb = @import("../libcxmdb.zig");
+pub const definitions = @import("SWD.definitions.zig");
+
 pub const name = .swd;
 pub const vtable = struct {
     swd_reset: *const fn (self: *cxmdb.API) anyerror!void,
     swd: *const fn (self: *cxmdb.API, info: SwdInfo) anyerror!u32,
 };
-
-const std = @import("std");
-const cxmdb = @import("../libcxmdb.zig");
-const definitions = @import("SWD.definitions.zig");
 
 pub const Error = error{
     Fault,
@@ -24,6 +24,16 @@ pub const SwdInfo = struct {
     A: definitions.A32 = .A00,
     DATA: u32 = 0x00000000,
 };
+
+pub fn init(self: *cxmdb.API) !void {
+    self.user_data = .{ .swd = try self.allocator.create(@This()) };
+    self.user_data.?.swd.cached_select = .{ .APBANKSEL = 0, .APSEL = 0, .DPBANKSEL = 0, .RESERVED0 = 0 };
+    self.user_data.?.swd.cached_select_old = .{ .APBANKSEL = 0, .APSEL = 0, .DPBANKSEL = 0, .RESERVED0 = 1 };
+}
+
+pub fn deinit(self: *cxmdb.API) void {
+    self.allocator.destroy(self.user_data.?.swd);
+}
 
 fn u32ToStruct(T: type, val_: u32) !T {
     var val: [4]u8 = @bitCast(val_);
@@ -49,44 +59,34 @@ fn structToU32(str: anytype) !u32 {
     return @bitCast(result);
 }
 
-pub fn init(self: *cxmdb.API) !void {
-    self.user_data = .{ .swd = try self.allocator.create(@This()) };
-    self.user_data.?.swd.cached_select = .{ .APBANKSEL = 0, .APSEL = 0, .DPBANKSEL = 0, .RESERVED0 = 0 };
-    self.user_data.?.swd.cached_select_old = .{ .APBANKSEL = 0, .APSEL = 0, .DPBANKSEL = 0, .RESERVED0 = 1 };
+pub fn swd(self: *cxmdb.API, info: SwdInfo) anyerror!u32 {
+    return self.vtable.swd.swd(self, info);
 }
 
-pub fn deinit(self: *cxmdb.API) void {
-    self.allocator.destroy(self.user_data.?.swd);
+pub fn swd_reset(self: *cxmdb.API) anyerror!void {
+    return self.vtable.swd.swd_reset(self);
 }
-
-const AP = struct {
-    typ: enum {
-        mem,
-        other,
-    },
-    id: u8,
-};
 
 pub fn select_ap(self: *cxmdb.API, id: u8) !void {
     (try self.getContext(.swd)).cached_select.APSEL = id;
 }
 
-pub fn query_aps(self: *cxmdb.API) ![]AP {
+pub fn query_aps(self: *cxmdb.API) !std.ArrayList(definitions.AP_IDR) {
+    var result = std.ArrayList(definitions.AP_IDR).init(self.allocator);
     for (0..255) |i| {
         try select_ap(self, @intCast(i));
         const idr = read_dap_reg(self, definitions.AP_IDR) catch {
             // Clear error flags
             _ = try self.vtable.swd.swd(self, .{ .APnDP = .DP, .RnW = .W, .A = .A00, .DATA = 0x0000001E });
-
             break;
         };
 
         if (try structToU32(idr) == 0) {
             break;
         }
-        std.debug.print("Class:{x} Designer:{x} Revision:{x} TYPE:{x} Variant:{x}\n", .{ idr.CLASS, idr.DESIGNER, idr.REVISION, idr.TYPE, idr.VARIANT });
+        try result.append(idr);
     }
-    return &.{};
+    return result;
 }
 
 pub fn update_select_reg(self: *cxmdb.API, Reg: type) !definitions.RegisterAddress {
@@ -136,8 +136,7 @@ pub fn setup_connection(self: *cxmdb.API) !void {
     try self.vtable.swd.swd_reset(self);
 
     // Read and report DPIDR register to leave reset
-    const tid = try read_dap_reg(self, definitions.DPIDR);
-    std.debug.print("Revision:{x}, Partno:{x}, Min:{x} Version:{x} Designer:{x}\n", .{ tid.REVISION, tid.PARTNO, tid.MIN, tid.VERSION, tid.DESIGNER });
+    _ = try read_dap_reg(self, definitions.DPIDR);
 
     // Clear error flags
     _ = try self.vtable.swd.swd(self, .{ .APnDP = .DP, .RnW = .W, .A = .A00, .DATA = 0x0000001E });
@@ -148,13 +147,8 @@ pub fn setup_connection(self: *cxmdb.API) !void {
     ctrl_stat.CSYSPWRUPREQ = 1;
     ctrl_stat.ORUNDETECT = 1;
     try write_dap_reg(self, definitions.CTRL_STAT, ctrl_stat);
-    //try self.write_dap_reg(definitions.CTRL_STAT, ctrl_stat);
-
-    //while (ctrl_stat.CSYSPWRUPACK == 0 and ctrl_stat.CDBGPWRUPACK == 0) {
 
     while (ctrl_stat.CDBGPWRUPACK != 1) {
         ctrl_stat = try read_dap_reg(self, definitions.CTRL_STAT);
-        //std.debug.print("SysAck:{x} DbgAck:{x}\n", .{ ctrl_stat.CSYSPWRUPACK, ctrl_stat.CDBGPWRUPACK });
     }
-    //}
 }

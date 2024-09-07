@@ -34,12 +34,12 @@ pub fn getParentContext(self: @This(), comptime typ: Node.node_enum) !*Node.node
     return self.parent_node.getContext(typ);
 }
 
-pub fn getContext(self: @This(), comptime typ: api_enum) !*apis[@intFromEnum(typ)] {
+pub fn getContext(self: @This(), comptime typ: api_enum) !*apis[@intFromEnum(typ) -| 1] {
     if (self.user_data == null) return cxmdb.Error.NoUserData;
     return @field(self.user_data.?, @tagName(typ));
 }
 
-pub fn getVtable(self: @This(), comptime typ: api_enum) *const apis[@intFromEnum(typ)].vtable {
+pub fn getVtable(self: @This(), comptime typ: api_enum) *const apis[@intFromEnum(typ) -| 1].vtable {
     return &@field(self.vtable, @tagName(typ));
 }
 
@@ -52,7 +52,14 @@ pub const api_enum = blk: {
             .is_exhaustive = true,
         },
     };
-    for (apis, 0..) |api, i| {
+
+    // Add "Null Field"
+    result.Enum.fields = result.Enum.fields ++ [_]std.builtin.Type.EnumField{.{
+        .name = "null",
+        .value = 0,
+    }};
+
+    for (apis, 1..) |api, i| {
         result.Enum.fields = result.Enum.fields ++ [_]std.builtin.Type.EnumField{.{
             .name = @tagName(api.name),
             .value = i,
@@ -71,6 +78,13 @@ pub const api_vtable_union = blk: {
             .decls = &.{},
         },
     };
+
+    // Add null vtable
+    result.Union.fields = result.Union.fields ++ [_]std.builtin.Type.UnionField{.{
+        .name = "null",
+        .type = void,
+        .alignment = @alignOf(void),
+    }};
 
     for (apis) |api| {
         result.Union.fields = result.Union.fields ++ [_]std.builtin.Type.UnionField{.{
@@ -92,6 +106,13 @@ pub const api_union = blk: {
             .decls = &.{},
         },
     };
+
+    // Add null api
+    result.Union.fields = result.Union.fields ++ [_]std.builtin.Type.UnionField{.{
+        .name = "null",
+        .type = void,
+        .alignment = @alignOf(void),
+    }};
 
     for (apis) |api| {
         const apiptr = @Type(std.builtin.Type{
