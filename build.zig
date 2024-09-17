@@ -90,5 +90,5 @@ pub fn build(b: *std.Build) void {
     //     "test_firmware.elf",
     // );
     // b.getInstallStep().dependOn(&test_firmware_install.step);
-    //    mz.install_firmware(b, test_firmware, .{ .format = .elf });
+    // mz.install_firmware(b, test_firmware, .{ .format = .elf });
 }

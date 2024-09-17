@@ -24,6 +24,7 @@ read_buf: []u8,
 pub const Error = error{
     NoDevice,
     BadTransport,
+    JLinkNotInitialized,
 };
 
 const std = @import("std");
@@ -121,7 +122,9 @@ fn swd(self: *cxmdb.API, info: SWD.SwdInfo) !u32 {
         if (jlink.read_buf[7] != 0) {
             return SWD.Error.NeedReset;
         } else if ((jlink.read_buf[2] & 7) == 1) { // Continue
-        } else if ((jlink.read_buf[2] & 7) == 2) { // Continue
+        } else if ((jlink.read_buf[2] & 7) == 2) {
+            std.debug.print("Wait Error!\n", .{});
+            return SWD.Error.Wait;
         } else if ((jlink.read_buf[2] & 7) == 4) {
             return SWD.Error.Fault;
         } else return SWD.Error.NeedReset;
@@ -168,7 +171,7 @@ fn xfer(self: *cxmdb.Node, out: usize, in: usize) !void {
     const xport = self.transport.?;
     const jlink = try self.getContext(.jlink);
 
-    if (jlink.connection_handle == null) return;
+    if (jlink.connection_handle == null) return Error.JLinkNotInitialized;
 
     var actual_len: usize = 0;
     var in_cnt: usize = in;

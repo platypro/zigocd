@@ -13,7 +13,7 @@ const ApiMap = std.AutoArrayHashMapUnmanaged(API.api_enum, *API);
 const AnyError = blk: {
     var errors: type = cxmdb.Error;
     for (nodes) |node| {
-        const to_add = @typeInfo(@typeInfo(@TypeOf(node.init)).Fn.return_type.?).ErrorUnion.error_set;
+        const to_add = @typeInfo(@typeInfo(@TypeOf(node.init)).@"fn".return_type.?).error_union.error_set;
         errors = errors || to_add;
     }
     break :blk errors;
@@ -52,7 +52,7 @@ pub const node_init_deinit = blk: {
 
 pub const node_enum = blk: {
     var result = std.builtin.Type{
-        .Enum = .{
+        .@"enum" = .{
             .tag_type = u32,
             .fields = &.{},
             .decls = &.{},
@@ -60,7 +60,7 @@ pub const node_enum = blk: {
         },
     };
     for (nodes, 0..) |node, i| {
-        result.Enum.fields = result.Enum.fields ++ [_]std.builtin.Type.EnumField{.{
+        result.@"enum".fields = result.@"enum".fields ++ [_]std.builtin.Type.EnumField{.{
             .name = @tagName(node.name),
             .value = i,
         }};
@@ -70,7 +70,7 @@ pub const node_enum = blk: {
 
 pub const node_union = blk: {
     var result = std.builtin.Type{
-        .Union = .{
+        .@"union" = .{
             .layout = .auto,
             .tag_type = node_enum,
             .fields = &.{},
@@ -80,7 +80,7 @@ pub const node_union = blk: {
 
     for (nodes) |node| {
         const nodeptr = @Type(std.builtin.Type{
-            .Pointer = .{
+            .pointer = .{
                 .size = .One,
                 .is_const = false,
                 .is_volatile = false,
@@ -92,7 +92,7 @@ pub const node_union = blk: {
             },
         });
 
-        result.Union.fields = result.Union.fields ++ [_]std.builtin.Type.UnionField{.{
+        result.@"union".fields = result.@"union".fields ++ [_]std.builtin.Type.UnionField{.{
             .name = @tagName(node.name),
             .type = nodeptr,
             .alignment = @alignOf(nodeptr),
