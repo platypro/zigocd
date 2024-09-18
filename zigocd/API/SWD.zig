@@ -1,13 +1,13 @@
 const std = @import("std");
-const cxmdb = @import("../libcxmdb.zig");
+const ocd = @import("../root.zig");
 pub const definitions = @import("SWD.definitions.zig");
 
 pub usingnamespace @import("SWD.prober.zig");
 
 pub const name = .swd;
 pub const vtable = struct {
-    swd_reset: *const fn (self: *cxmdb.API) anyerror!void,
-    swd: *const fn (self: *cxmdb.API, info: SwdInfo) anyerror!u32,
+    swd_reset: *const fn (self: *ocd.API) anyerror!void,
+    swd: *const fn (self: *ocd.API, info: SwdInfo) anyerror!u32,
 };
 
 pub const Error = error{
@@ -28,13 +28,13 @@ pub const SwdInfo = struct {
     DATA: u32 = 0x00000000,
 };
 
-pub fn init(self: *cxmdb.API) !void {
+pub fn init(self: *ocd.API) !void {
     self.user_data = .{ .swd = try self.allocator.create(@This()) };
     self.user_data.?.swd.cached_select = .{ .APBANKSEL = 0, .APSEL = 0, .DPBANKSEL = 0, .RESERVED0 = 0 };
     self.user_data.?.swd.cached_select_old = .{ .APBANKSEL = 0, .APSEL = 0, .DPBANKSEL = 0, .RESERVED0 = 1 };
 }
 
-pub fn deinit(self: *cxmdb.API) void {
+pub fn deinit(self: *ocd.API) void {
     self.allocator.destroy(self.user_data.?.swd);
 }
 
@@ -82,19 +82,19 @@ pub fn structToU32(str: anytype) !u32 {
     return @bitCast(result);
 }
 
-pub fn swd(self: *cxmdb.API, info: SwdInfo) anyerror!u32 {
+pub fn swd(self: *ocd.API, info: SwdInfo) anyerror!u32 {
     return self.vtable.swd.swd(self, info);
 }
 
-pub fn swd_reset(self: *cxmdb.API) anyerror!void {
+pub fn swd_reset(self: *ocd.API) anyerror!void {
     return self.vtable.swd.swd_reset(self);
 }
 
-pub fn select_ap(self: *cxmdb.API, id: u8) !void {
+pub fn select_ap(self: *ocd.API, id: u8) !void {
     (try self.getContext(.swd)).cached_select.APSEL = id;
 }
 
-pub fn query_aps(self: *cxmdb.API) !std.ArrayList(definitions.AP_IDR) {
+pub fn query_aps(self: *ocd.API) !std.ArrayList(definitions.AP_IDR) {
     var result = std.ArrayList(definitions.AP_IDR).init(self.allocator);
     for (0..255) |i| {
         try select_ap(self, @intCast(i));
@@ -113,7 +113,7 @@ pub fn query_aps(self: *cxmdb.API) !std.ArrayList(definitions.AP_IDR) {
     return result;
 }
 
-pub fn update_select_reg(self: *cxmdb.API, Reg: type) !definitions.RegisterAddress {
+pub fn update_select_reg(self: *ocd.API, Reg: type) !definitions.RegisterAddress {
     if (!@hasDecl(Reg, "addr")) {
         return Error.NoAddr;
     }
@@ -136,25 +136,25 @@ pub fn update_select_reg(self: *cxmdb.API, Reg: type) !definitions.RegisterAddre
     return addr;
 }
 
-pub fn read_dap_reg_raw(self: *cxmdb.API, Reg: type) !u32 {
+pub fn read_dap_reg_raw(self: *ocd.API, Reg: type) !u32 {
     const addr = try update_select_reg(self, Reg);
     return try self.vtable.swd.swd(self, .{ .APnDP = addr.APnDP, .RnW = .R, .A = addr.A, .DATA = 0 });
 }
 
-pub fn read_dap_reg(self: *cxmdb.API, Reg: type) !Reg {
+pub fn read_dap_reg(self: *ocd.API, Reg: type) !Reg {
     return read_dap_reg_as(self, Reg, Reg);
 }
 
-pub fn read_dap_reg_as(self: *cxmdb.API, Reg: type, As: type) !As {
+pub fn read_dap_reg_as(self: *ocd.API, Reg: type, As: type) !As {
     return u32ToStruct(As, try read_dap_reg_raw(self, Reg));
 }
 
-pub fn write_dap_reg(self: *cxmdb.API, Reg: type, value: Reg) !void {
+pub fn write_dap_reg(self: *ocd.API, Reg: type, value: Reg) !void {
     const addr = try update_select_reg(self, Reg);
     _ = try self.vtable.swd.swd(self, .{ .APnDP = addr.APnDP, .RnW = .W, .A = addr.A, .DATA = try structToU32(value) });
 }
 
-pub fn mem_setup(self: *cxmdb.API) !void {
+pub fn mem_setup(self: *ocd.API) !void {
     const csw: definitions.AP_MEM_CSW = .{
         .Size = 0b010,
         .ADDRINC = 0b01,
@@ -171,7 +171,7 @@ pub fn mem_setup(self: *cxmdb.API) !void {
     try write_dap_reg(self, definitions.AP_MEM_CSW, csw);
 }
 
-fn read_mem_do(self: *cxmdb.API, addr: u32, buf: []u32) !u32 {
+fn read_mem_do(self: *ocd.API, addr: u32, buf: []u32) !u32 {
     while ((try read_dap_reg(self, definitions.AP_MEM_CSW)).TRINPROG != 0) {
         continue;
     }
@@ -195,7 +195,7 @@ fn read_mem_do(self: *cxmdb.API, addr: u32, buf: []u32) !u32 {
     return @intCast(buf.len);
 }
 
-inline fn write_mem_do(self: *cxmdb.API, addr: u32, buf: []u32) u32 {
+inline fn write_mem_do(self: *ocd.API, addr: u32, buf: []u32) u32 {
     const tar: definitions.AP_MEM_TAR_LO = .{
         .ADDR = addr,
     };
@@ -207,7 +207,7 @@ inline fn write_mem_do(self: *cxmdb.API, addr: u32, buf: []u32) u32 {
     read_dap_reg(self, definitions.RDBUFF);
 }
 
-fn mem_op_do(self: *cxmdb.API, addr: u32, buf: []u32, fun: fn (self: *cxmdb.API, addr: u32, buf: []u32) anyerror!u32) !u32 {
+fn mem_op_do(self: *ocd.API, addr: u32, buf: []u32, fun: fn (self: *ocd.API, addr: u32, buf: []u32) anyerror!u32) !u32 {
     var current_ptr: u32 = 0;
 
     while ((buf.len - current_ptr) > 0) {
@@ -219,21 +219,21 @@ fn mem_op_do(self: *cxmdb.API, addr: u32, buf: []u32, fun: fn (self: *cxmdb.API,
     return @intCast(buf.len);
 }
 
-pub fn read_mem(self: *cxmdb.API, addr: u32, buf: []u32) !u32 {
+pub fn read_mem(self: *ocd.API, addr: u32, buf: []u32) !u32 {
     return mem_op_do(self, addr, buf, read_mem_do);
 }
 
-pub fn read_mem_single(self: *cxmdb.API, addr: u32) !u32 {
+pub fn read_mem_single(self: *ocd.API, addr: u32) !u32 {
     var buf: [1]u32 = undefined;
     _ = try mem_op_do(self, addr, &buf, read_mem_do);
     return buf[0];
 }
 
-pub fn write_mem(self: *cxmdb.API, addr: u32, buf: []u32) void {
+pub fn write_mem(self: *ocd.API, addr: u32, buf: []u32) void {
     return mem_op_do(self, addr, buf, write_mem_do);
 }
 
-pub fn setup_connection(self: *cxmdb.API) !void {
+pub fn setup_connection(self: *ocd.API) !void {
     try self.vtable.swd.swd_reset(self);
 
     // Read and report DPIDR register to leave reset

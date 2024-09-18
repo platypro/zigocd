@@ -1,7 +1,7 @@
 const definitions = @import("SWD.definitions.zig");
 
 const std = @import("std");
-const cxmdb = @import("../libcxmdb.zig");
+const ocd = @import("../root.zig");
 const SWD = @import("SWD.zig");
 const CoresightEntry = struct { definitions.AP };
 
@@ -35,17 +35,17 @@ const APDefinition = struct {
     component: Component,
 };
 
-pub fn read_coresight_register(self: *cxmdb.API, base: u32, Reg: type) !Reg {
+pub fn read_coresight_register(self: *ocd.API, base: u32, Reg: type) !Reg {
     const val = try SWD.read_mem_single(self, base + Reg.addr);
     return SWD.u32ToStruct(Reg, val);
 }
 
-pub fn write_coresight_register(self: *cxmdb.API, base: u32, reg: anytype) void {
+pub fn write_coresight_register(self: *ocd.API, base: u32, reg: anytype) void {
     const val: u32 = SWD.structToU32(reg);
     _ = SWD.write_mem(self, base + reg.addr, &val);
 }
 
-fn probe_coresight_element(self: *cxmdb.API, base: u32, depth: u32) !Component {
+fn probe_coresight_element(self: *ocd.API, base: u32, depth: u32) !Component {
     if (depth > 2) {
         return Error.Recursion;
     }
@@ -96,7 +96,7 @@ fn probe_coresight_element(self: *cxmdb.API, base: u32, depth: u32) !Component {
     return result;
 }
 
-pub fn probe(self: *cxmdb.API) !std.ArrayList(APDefinition) {
+pub fn probe(self: *ocd.API) !std.ArrayList(APDefinition) {
     try SWD.setup_connection(self);
     var aps: std.ArrayList(definitions.AP_IDR) = try SWD.query_aps(self);
     var result = std.ArrayList(APDefinition).init(self.allocator);

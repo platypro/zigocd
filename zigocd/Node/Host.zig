@@ -1,6 +1,6 @@
 pub const name = .host;
 
-pub fn init(self: *cxmdb.Node) !void {
+pub fn init(self: *ocd.Node) !void {
     self.user_data = .{ .host = try self.allocator.create(@This()) };
     const ctx = try self.getContext(.host);
     ctx.cached_processed_devices = ProcessedDeviceList.init(self.allocator);
@@ -12,7 +12,7 @@ pub fn init(self: *cxmdb.Node) !void {
         return Error.LibUsbError;
     }
 
-    const usb_vtable = cxmdb.API.api_vtable_union{ .usb = .{
+    const usb_vtable = ocd.API.api_vtable_union{ .usb = .{
         .getDevices = usb_getDevices,
         .connect = usb_connect,
         .disconnect = usb_disconnect,
@@ -22,7 +22,7 @@ pub fn init(self: *cxmdb.Node) !void {
     try self.register_api(.usb, usb_vtable);
 }
 
-pub fn deinit(self: *cxmdb.Node) void {
+pub fn deinit(self: *ocd.Node) void {
     const ctx = self.getContext(.host) catch return;
 
     for (ctx.cached_processed_devices.items) |dev| {
@@ -47,7 +47,7 @@ const Error = error{
 };
 
 const std = @import("std");
-const cxmdb = @import("../libcxmdb.zig");
+const ocd = @import("../root.zig");
 const USB = @import("../API/USB.zig");
 
 const c = @cImport({
@@ -57,14 +57,14 @@ const c = @cImport({
 
 usb_ctx: ?*c.libusb_context,
 cached_devices: [*c]?*c.libusb_device,
-opened_devices: std.AutoArrayHashMapUnmanaged(cxmdb.Handle, ?*c.libusb_device_handle),
-opened_device_count: cxmdb.Handle,
+opened_devices: std.AutoArrayHashMapUnmanaged(ocd.Handle, ?*c.libusb_device_handle),
+opened_device_count: ocd.Handle,
 cached_processed_devices: ProcessedDeviceList,
 
 const ProcessedDeviceList = std.ArrayList(USB.ChoosableDevice);
 
 fn usb_getDevices(
-    api: *cxmdb.API,
+    api: *ocd.API,
     valid_vendors: []const u16,
     valid_products: []const u16,
 ) ![]USB.ChoosableDevice {
@@ -158,9 +158,9 @@ fn usb_getDevices(
 }
 
 fn usb_connect(
-    api: *cxmdb.API,
+    api: *ocd.API,
     device: USB.ChoosableDevice,
-) !cxmdb.Handle {
+) !ocd.Handle {
     const self = try api.getParentContext(.host);
 
     var dev_ptr: ?*c.libusb_device_handle = undefined;
@@ -175,7 +175,7 @@ fn usb_connect(
     return self.opened_device_count - 1;
 }
 
-fn usb_disconnect(api: *cxmdb.API, handle: cxmdb.Handle) !void {
+fn usb_disconnect(api: *ocd.API, handle: ocd.Handle) !void {
     const self = try api.getParentContext(.host);
     const device = self.opened_devices.get(handle);
     if (device == null) return;
@@ -184,8 +184,8 @@ fn usb_disconnect(api: *cxmdb.API, handle: cxmdb.Handle) !void {
 }
 
 fn usb_bulkXfer(
-    api: *cxmdb.API,
-    ctx: cxmdb.Handle,
+    api: *ocd.API,
+    ctx: ocd.Handle,
     addr: usize,
     buf: []u8,
 ) !usize {

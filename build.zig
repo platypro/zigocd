@@ -18,38 +18,29 @@ pub fn build(b: *std.Build) void {
     // set a preferred release mode, allowing the user to decide how to optimize.
     const optimize = b.standardOptimizeOption(.{});
 
-    const libcxmdb = b.addModule("libcxmdb", .{ .root_source_file = b.path("libcxmdb/libcxmdb.zig") });
+    const ocd = b.addModule("ocd", .{ .root_source_file = b.path("zigocd/root.zig") });
 
     // Link libusb
     const libusb_dep = b.dependency("libusb", .{});
 
-    libcxmdb.linkLibrary(libusb_dep.artifact("usb"));
+    ocd.linkLibrary(libusb_dep.artifact("usb"));
     if (b.graph.host.result.os.tag == .windows) {
-        libcxmdb.linkSystemLibrary("shlwapi", .{});
+        ocd.linkSystemLibrary("shlwapi", .{});
     }
 
     const exe = b.addExecutable(.{
-        .name = "cxmdb",
+        .name = "ocd",
         .root_source_file = b.path("src/main.zig"),
         .target = target,
         .optimize = optimize,
     });
 
-    exe.root_module.addImport("libcxmdb", libcxmdb);
+    exe.root_module.addImport("ocd", ocd);
 
     // This declares intent for the executable to be installed into the
     // standard location when the user invokes the "install" step (the default
     // step when running `zig build`).
     b.installArtifact(exe);
-
-    const exe_check = b.addExecutable(.{
-        .name = "cxmdb",
-        .root_source_file = b.path("src/main.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
-    const check = b.step("check", "Check if foo compiles");
-    check.dependOn(&exe_check.step);
 
     // This *creates* a Run step in the build graph, to be executed when another
     // step is evaluated that depends on it. The next line below will establish

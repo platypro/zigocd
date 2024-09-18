@@ -1,9 +1,9 @@
 pub const name = .jlink;
 
-pub fn init(self: *cxmdb.Node) !void {
+pub fn init(self: *ocd.Node) !void {
     self.user_data = .{ .jlink = try self.allocator.create(@This()) };
 
-    const swd_vtable = cxmdb.API.api_vtable_union{ .swd = .{ .swd = swd, .swd_reset = swd_reset } };
+    const swd_vtable = ocd.API.api_vtable_union{ .swd = .{ .swd = swd, .swd_reset = swd_reset } };
 
     const ctx = try self.getContext(.jlink);
     ctx.connection_handle = null;
@@ -12,13 +12,13 @@ pub fn init(self: *cxmdb.Node) !void {
     try self.register_api(.swd, swd_vtable);
 }
 
-pub fn deinit(self: *cxmdb.Node) void {
+pub fn deinit(self: *ocd.Node) void {
     const ctx = self.getContext(.jlink) catch return;
     self.allocator.free(ctx.read_buf);
     self.allocator.destroy(self.user_data.?.jlink);
 }
 
-connection_handle: ?cxmdb.Handle,
+connection_handle: ?ocd.Handle,
 read_buf: []u8,
 
 pub const Error = error{
@@ -28,7 +28,7 @@ pub const Error = error{
 };
 
 const std = @import("std");
-const cxmdb = @import("../libcxmdb.zig");
+const ocd = @import("../root.zig");
 
 const USB = @import("../API/USB.zig");
 const SWD = @import("../API/SWD.zig");
@@ -38,7 +38,7 @@ const JLINK_ENDPOINT_OUT = 0x02;
 
 const buf_size = 0x1000; // 4kb
 
-fn swd(self: *cxmdb.API, info: SWD.SwdInfo) !u32 {
+fn swd(self: *ocd.API, info: SWD.SwdInfo) !u32 {
     const jlink = try self.getParentContext(.jlink);
     // JLink automatically ignores turnarounds when filling the read field,
     // but needs them still on the write field
@@ -147,7 +147,7 @@ fn swd(self: *cxmdb.API, info: SWD.SwdInfo) !u32 {
     }
 }
 
-fn swd_reset(self: *cxmdb.API) !void {
+fn swd_reset(self: *ocd.API) !void {
     const jlink = try self.getParentContext(.jlink);
     var out_stream = std.io.fixedBufferStream(jlink.read_buf);
     const writer = out_stream.writer();
@@ -166,7 +166,7 @@ fn swd_reset(self: *cxmdb.API) !void {
     try xfer(self.parent_node, 18, 8);
 }
 
-fn xfer(self: *cxmdb.Node, out: usize, in: usize) !void {
+fn xfer(self: *ocd.Node, out: usize, in: usize) !void {
     if (self.transport == null) return;
     const xport = self.transport.?;
     const jlink = try self.getContext(.jlink);
@@ -212,7 +212,7 @@ fn xfer(self: *cxmdb.Node, out: usize, in: usize) !void {
     }
 }
 
-fn set_speed(self: *cxmdb.Node, speed_in_khz: u16) !void {
+fn set_speed(self: *ocd.Node, speed_in_khz: u16) !void {
     const jlink = self.user_data.?.jlink;
     var out_stream = std.io.fixedBufferStream(jlink.read_buf);
     var writer = out_stream.writer();
@@ -223,7 +223,7 @@ fn set_speed(self: *cxmdb.Node, speed_in_khz: u16) !void {
     try xfer(self, 3, 0);
 }
 
-fn set_if(self: *cxmdb.Node) !void {
+fn set_if(self: *ocd.Node) !void {
     const jlink = self.user_data.?.jlink;
     var out_stream = std.io.fixedBufferStream(jlink.read_buf);
     var writer = out_stream.writer();
@@ -234,14 +234,14 @@ fn set_if(self: *cxmdb.Node) !void {
     try xfer(self, 2, 4);
 }
 
-fn reset_device(self: *cxmdb.Node) !void {
+fn reset_device(self: *ocd.Node) !void {
     const jlink = self.user_data.?.jlink;
     jlink.read_buf[0] = 0x02;
 
     try xfer(self, 1, 0);
 }
 
-pub fn connect_to_first(self: *cxmdb.Node) !void {
+pub fn connect_to_first(self: *ocd.Node) !void {
     if (self.transport == null) return;
     const xport = self.transport.?;
     if (xport.type != .usb) {

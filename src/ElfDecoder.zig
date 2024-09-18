@@ -10,7 +10,7 @@ const Error = error{
 };
 
 /// A loadable section represents a chunk of memory in the virtual address space
-/// which is seen by cxmdb and not the target cpu.
+/// which is seen by zigocd and not the target cpu.
 const LoadableSection = struct {
     start_addr: usize,
     end_addr: usize,
@@ -23,10 +23,10 @@ const LoadableSection = struct {
 };
 const LoadableSectionList = std.ArrayList(LoadableSection);
 
-/// A struct which maps ranges virtual address ranges in cxmdb with physical
+/// A struct which maps ranges virtual address ranges in zigocd with physical
 /// addresses on the target device.
 const LoadMap = struct {
-    /// Virtual (cxmdb) address
+    /// Virtual (zigocd) address
     vma: usize,
     /// Physical (Target) address
     lma: usize,

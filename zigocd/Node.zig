@@ -1,6 +1,6 @@
 const std = @import("std");
 const API = @import("API.zig");
-const cxmdb = @import("libcxmdb.zig");
+const ocd = @import("root.zig");
 
 pub const nodes = .{
     @import("Node/Host.zig"),
@@ -11,7 +11,7 @@ pub const nodes = .{
 const ApiMap = std.AutoArrayHashMapUnmanaged(API.api_enum, *API);
 
 const AnyError = blk: {
-    var errors: type = cxmdb.Error;
+    var errors: type = ocd.Error;
     for (nodes) |node| {
         const to_add = @typeInfo(@typeInfo(@TypeOf(node.init)).Fn.return_type.?).ErrorUnion.error_set;
         errors = errors || to_add;
@@ -134,13 +134,13 @@ pub fn register_api(self: *@This(), comptime typ: API.api_enum, vtable: API.api_
 pub fn getApi(self: @This(), comptime api: API.api_enum) !*API {
     const result = self.apis.get(api);
     if (result == null) {
-        return cxmdb.Error.NoApi;
+        return ocd.Error.NoApi;
     }
     return result.?;
 }
 
 pub fn getContext(self: @This(), comptime typ: node_enum) !*nodes[@intFromEnum(typ)] {
-    if (self.user_data == null) return cxmdb.Error.NoUserData;
+    if (self.user_data == null) return ocd.Error.NoUserData;
     return @field(self.user_data.?, @tagName(typ));
 }
 

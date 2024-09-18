@@ -1,13 +1,13 @@
 const std = @import("std");
 
-const libcxmdb = @import("libcxmdb");
+const ocd = @import("ocd");
 const ElfDecoder = @import("ElfDecoder.zig");
 
 const Error = error{
     NoDevice,
 };
 
-fn printCoresightItem(component: libcxmdb.API.getClass(.swd).Component) void {
+fn printCoresightItem(component: ocd.API.getClass(.swd).Component) void {
     switch (component.data) {
         .ROMTABLE => {
             for (component.data.ROMTABLE.entries.items) |item| {
@@ -51,7 +51,7 @@ pub fn main() !void {
         std.debug.print("VMA:{x}, LMA:{x}, Size:{x}\n", .{ load_map.vma, load_map.lma, load_map.size });
     }
 
-    var debugger: libcxmdb = undefined;
+    var debugger: ocd = undefined;
     try debugger.init(allocator);
     defer debugger.deinit();
 
@@ -64,9 +64,9 @@ pub fn main() !void {
     const samd51 = try debugger.spawnNode(.samd51);
     samd51.transport = swd;
 
-    try libcxmdb.Node.getClass(.jlink).connect_to_first(jlink);
+    try ocd.Node.getClass(.jlink).connect_to_first(jlink);
 
-    const aps = try libcxmdb.API.getClass(.swd).probe(swd);
+    const aps = try ocd.API.getClass(.swd).probe(swd);
 
     for (aps.items, 0..) |ap, i| {
         std.debug.print(
@@ -77,6 +77,4 @@ pub fn main() !void {
         std.debug.print("Component (Base {x})\n", .{@as(u32, @intCast(ap.component.base_address)) << 12});
         printCoresightItem(ap.component);
     }
-
-    // try libcxmdb.Node.getClass(.samd51).connect(samd51);
 }

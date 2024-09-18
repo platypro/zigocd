@@ -1,6 +1,6 @@
 const std = @import("std");
 const Node = @import("Node.zig");
-const cxmdb = @import("libcxmdb.zig");
+const ocd = @import("root.zig");
 
 pub const apis = &.{
     @import("API/SWD.zig"),
@@ -8,7 +8,7 @@ pub const apis = &.{
 };
 
 const AnyError = blk: {
-    var errors: type = cxmdb.Error;
+    var errors: type = ocd.Error;
     for (apis) |api| {
         const to_add = @typeInfo(@typeInfo(@TypeOf(api.init)).Fn.return_type.?).ErrorUnion.error_set;
         errors = errors || to_add;
@@ -35,7 +35,7 @@ pub fn getParentContext(self: @This(), comptime typ: Node.node_enum) !*Node.node
 }
 
 pub fn getContext(self: @This(), comptime typ: api_enum) !*apis[@intFromEnum(typ) -| 1] {
-    if (self.user_data == null) return cxmdb.Error.NoUserData;
+    if (self.user_data == null) return ocd.Error.NoUserData;
     return @field(self.user_data.?, @tagName(typ));
 }
 

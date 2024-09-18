@@ -6,27 +6,27 @@ pub const Error = error{
 
 pub const vtable = struct {
     getDevices: *const fn (
-        api: *cxmdb.API,
+        api: *ocd.API,
         valid_vendors: []const u16,
         valid_products: []const u16,
     ) anyerror![]ChoosableDevice,
     connect: *const fn (
-        api: *cxmdb.API,
+        api: *ocd.API,
         device: ChoosableDevice,
-    ) anyerror!cxmdb.Handle,
+    ) anyerror!ocd.Handle,
     disconnect: *const fn (
-        api: *cxmdb.API,
-        handle: cxmdb.Handle,
+        api: *ocd.API,
+        handle: ocd.Handle,
     ) anyerror!void,
     bulkXfer: *const fn (
-        api: *cxmdb.API,
-        ctx: cxmdb.Handle,
+        api: *ocd.API,
+        ctx: ocd.Handle,
         addr: usize,
         buf: []u8,
     ) anyerror!usize,
 };
 
-const cxmdb = @import("../libcxmdb.zig");
+const ocd = @import("../root.zig");
 
 pub const ChoosableDevice = struct {
     bus: u16,
@@ -34,13 +34,13 @@ pub const ChoosableDevice = struct {
     manufacturer_str: []const u8,
     product_str: []const u8,
     has_driver: bool,
-    handle: cxmdb.Handle,
+    handle: ocd.Handle,
 };
 
-pub fn init(self: *cxmdb.API) !void {
+pub fn init(self: *ocd.API) !void {
     _ = self;
 }
 
-pub fn deinit(self: *cxmdb.API) void {
+pub fn deinit(self: *ocd.API) void {
     _ = self;
 }
