@@ -8,7 +8,7 @@ pub fn Promise(comptime T: type) type {
     return struct {
         pub const HeapType = struct {
             value: ?T = null,
-            sema: std.Thread.Semaphore = {},
+            sema: std.Thread.Semaphore = .{},
             pub fn fulfill(self: *@This(), val: T) void {
                 self.value = val;
                 self.sema.post();

@@ -3,11 +3,6 @@ const std = @import("std");
 const libcxmdb = @import("libcxmdb");
 const ElfDecoder = @import("ElfDecoder.zig");
 
-// pub fn panic(msg: []const u8, error_return_trace: ?*std.builtin.StackTrace, ret_addr: ?usize) noreturn {
-//     @breakpoint();
-//     std.builtin.default_panic(msg, error_return_trace, ret_addr);
-// }
-
 const Error = error{
     NoDevice,
 };

@@ -10,7 +10,7 @@ pub const apis = &.{
 const AnyError = blk: {
     var errors: type = cxmdb.Error;
     for (apis) |api| {
-        const to_add = @typeInfo(@typeInfo(@TypeOf(api.init)).@"fn".return_type.?).error_union.error_set;
+        const to_add = @typeInfo(@typeInfo(@TypeOf(api.init)).Fn.return_type.?).ErrorUnion.error_set;
         errors = errors || to_add;
     }
     break :blk errors;
@@ -45,7 +45,7 @@ pub fn getVtable(self: @This(), comptime typ: api_enum) *const apis[@intFromEnum
 
 pub const api_enum = blk: {
     var result = std.builtin.Type{
-        .@"enum" = .{
+        .Enum = .{
             .tag_type = u32,
             .fields = &.{},
             .decls = &.{},
@@ -54,13 +54,13 @@ pub const api_enum = blk: {
     };
 
     // Add "Null Field"
-    result.@"enum".fields = result.@"enum".fields ++ [_]std.builtin.Type.EnumField{.{
+    result.Enum.fields = result.Enum.fields ++ [_]std.builtin.Type.EnumField{.{
         .name = "null",
         .value = 0,
     }};
 
     for (apis, 1..) |api, i| {
-        result.@"enum".fields = result.@"enum".fields ++ [_]std.builtin.Type.EnumField{.{
+        result.Enum.fields = result.Enum.fields ++ [_]std.builtin.Type.EnumField{.{
             .name = @tagName(api.name),
             .value = i,
         }};
@@ -71,7 +71,7 @@ pub const api_enum = blk: {
 
 pub const api_vtable_union = blk: {
     var result = std.builtin.Type{
-        .@"union" = .{
+        .Union = .{
             .layout = .auto,
             .tag_type = api_enum,
             .fields = &.{},
@@ -80,14 +80,14 @@ pub const api_vtable_union = blk: {
     };
 
     // Add null vtable
-    result.@"union".fields = result.@"union".fields ++ [_]std.builtin.Type.UnionField{.{
+    result.Union.fields = result.Union.fields ++ [_]std.builtin.Type.UnionField{.{
         .name = "null",
         .type = void,
         .alignment = @alignOf(void),
     }};
 
     for (apis) |api| {
-        result.@"union".fields = result.@"union".fields ++ [_]std.builtin.Type.UnionField{.{
+        result.Union.fields = result.Union.fields ++ [_]std.builtin.Type.UnionField{.{
             .name = @tagName(api.name),
             .type = api.vtable,
             .alignment = @alignOf(api.vtable),
@@ -99,7 +99,7 @@ pub const api_vtable_union = blk: {
 
 pub const api_union = blk: {
     var result = std.builtin.Type{
-        .@"union" = .{
+        .Union = .{
             .layout = .auto,
             .tag_type = api_enum,
             .fields = &.{},
@@ -108,7 +108,7 @@ pub const api_union = blk: {
     };
 
     // Add null api
-    result.@"union".fields = result.@"union".fields ++ [_]std.builtin.Type.UnionField{.{
+    result.Union.fields = result.Union.fields ++ [_]std.builtin.Type.UnionField{.{
         .name = "null",
         .type = void,
         .alignment = @alignOf(void),
@@ -116,7 +116,7 @@ pub const api_union = blk: {
 
     for (apis) |api| {
         const apiptr = @Type(std.builtin.Type{
-            .pointer = .{
+            .Pointer = .{
                 .size = .One,
                 .is_const = false,
                 .is_volatile = false,
@@ -128,7 +128,7 @@ pub const api_union = blk: {
             },
         });
 
-        result.@"union".fields = result.@"union".fields ++ [_]std.builtin.Type.UnionField{.{
+        result.Union.fields = result.Union.fields ++ [_]std.builtin.Type.UnionField{.{
             .name = @tagName(api.name),
             .type = apiptr,
             .alignment = @alignOf(apiptr),
