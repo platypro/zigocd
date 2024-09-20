@@ -396,6 +396,7 @@ pub const CORESIGHT_CLASS = enum(u4) {
     PERIPHERAL_TEST_BLOCK = 0xB,
     GENERIC_IP_COMPONENT = 0xE,
     OTHER = 0xF,
+    _,
 };
 
 pub const CORESIGHT_CIDR0 = struct {

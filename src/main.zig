@@ -8,6 +8,9 @@ const Error = error{
 };
 
 fn printCoresightItem(component: ocd.API.getClass(.swd).Component) void {
+    std.debug.print("Manufacturer:{x} Product:{x} Name:{s}\n", .{ component.manufacturer, component.product, component.name });
+    std.debug.print("Base:{x}\n", .{component.base_address});
+
     switch (component.data) {
         .ROMTABLE => {
             for (component.data.ROMTABLE.entries.items) |item| {
@@ -19,12 +22,7 @@ fn printCoresightItem(component: ocd.API.getClass(.swd).Component) void {
                 printCoresightItem(item.component);
             }
         },
-        .CORESIGHT_COMPONENT => {
-            std.debug.print("Coresight\n", .{});
-        },
-        else => {
-            std.debug.print("Unknown Type\n", .{});
-        },
+        else => {},
     }
 }
 

@@ -1,5 +1,5 @@
 .{
-    .name = "zigocd",
+    .name = "zigocd-cli",
     // This is a [Semantic Version](https://semver.org/).
     // In a future version of Zig it will be used for package deduplication.
     .version = "0.0.0",
@@ -15,16 +15,13 @@
     // Once all dependencies are fetched, `zig build` no longer requires
     // internet connectivity.
     .dependencies = .{
-        .libusb = .{
-            .url = "git+https://github.com/platypro/libusb#832b30968e5912ed44e2b6f85b160bd1ca9c76d4",
-            .hash = "122012df9f49dcdbbd9d180716fb6c4c5fb34a37c0b8483a4838115f59087a4c6bde",
-        },
         .@"microzig/build" = .{
             .path = "microzig/build",
         },
         .@"microzig/bsp/microchip/atsam" = .{
             .path = "microzig/bsp/microchip/atsam",
         },
+        .zigocd = .{ .path = "zigocd" },
     },
     .paths = .{
         "build.zig",

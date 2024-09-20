@@ -1,8 +1,8 @@
 const std = @import("std");
 const ocd = @import("../root.zig");
-pub const definitions = @import("SWD.definitions.zig");
+pub const definitions = @import("SWD/definitions.zig");
 
-pub usingnamespace @import("SWD.prober.zig");
+pub usingnamespace @import("SWD/prober.zig");
 
 pub const name = .swd;
 pub const vtable = struct {
@@ -130,7 +130,10 @@ pub fn update_select_reg(self: *ocd.API, Reg: type) !definitions.RegisterAddress
         }
     }
     if (addr.BANKSEL != null and !std.meta.eql(ctx.cached_select, ctx.cached_select_old)) {
-        _ = try self.vtable.swd.swd(self, .{ .APnDP = .DP, .RnW = .W, .A = definitions.SELECT.addr.A, .DATA = try structToU32(ctx.cached_select) });
+        var result: anyerror!u32 = Error.Wait;
+        while (result == Error.Wait) {
+            result = self.vtable.swd.swd(self, .{ .APnDP = .DP, .RnW = .W, .A = definitions.SELECT.addr.A, .DATA = try structToU32(ctx.cached_select) });
+        }
         ctx.cached_select_old = ctx.cached_select;
     }
     return addr;
@@ -138,7 +141,11 @@ pub fn update_select_reg(self: *ocd.API, Reg: type) !definitions.RegisterAddress
 
 pub fn read_dap_reg_raw(self: *ocd.API, Reg: type) !u32 {
     const addr = try update_select_reg(self, Reg);
-    return try self.vtable.swd.swd(self, .{ .APnDP = addr.APnDP, .RnW = .R, .A = addr.A, .DATA = 0 });
+    var result: anyerror!u32 = Error.Wait;
+    while (result == Error.Wait) {
+        result = self.vtable.swd.swd(self, .{ .APnDP = addr.APnDP, .RnW = .R, .A = addr.A, .DATA = 0 });
+    }
+    return try result;
 }
 
 pub fn read_dap_reg(self: *ocd.API, Reg: type) !Reg {
@@ -149,44 +156,42 @@ pub fn read_dap_reg_as(self: *ocd.API, Reg: type, As: type) !As {
     return u32ToStruct(As, try read_dap_reg_raw(self, Reg));
 }
 
-pub fn write_dap_reg(self: *ocd.API, Reg: type, value: Reg) !void {
+pub fn write_dap_reg_raw(self: *ocd.API, Reg: type, value: u32) !void {
     const addr = try update_select_reg(self, Reg);
-    _ = try self.vtable.swd.swd(self, .{ .APnDP = addr.APnDP, .RnW = .W, .A = addr.A, .DATA = try structToU32(value) });
+    _ = try self.vtable.swd.swd(self, .{ .APnDP = addr.APnDP, .RnW = .W, .A = addr.A, .DATA = value });
+}
+
+pub fn write_dap_reg(self: *ocd.API, Reg: type, value: Reg) !void {
+    try write_dap_reg_raw(self, Reg, try structToU32(value));
 }
 
 pub fn mem_setup(self: *ocd.API) !void {
-    const csw: definitions.AP_MEM_CSW = .{
-        .Size = 0b010,
-        .ADDRINC = 0b01,
-        .DEVICEEN = 1,
-        .TRINPROG = 0,
-        .MODE = 0,
-        .TYPE = 0,
-        .MTE = 0,
-        .SPIDEN = 0,
-        .PROT = 0x23,
-        .DBGSWENABLE = 1,
-    };
+    var csw = try read_dap_reg(self, definitions.AP_MEM_CSW);
+    csw.DEVICEEN = 1;
+    csw.DBGSWENABLE = 1;
+    csw.MTE = 0;
+    csw.ADDRINC = 0b01;
+    csw.Size = 0b010;
+    csw.SPIDEN = 1;
+    csw.PROT |= 0x3F;
+    csw.TYPE = 0;
 
     try write_dap_reg(self, definitions.AP_MEM_CSW, csw);
+    _ = try read_dap_reg(self, definitions.RDBUFF);
 }
 
 fn read_mem_do(self: *ocd.API, addr: u32, buf: []u32) !u32 {
-    while ((try read_dap_reg(self, definitions.AP_MEM_CSW)).TRINPROG != 0) {
-        continue;
-    }
-
-    // try mem_setup(self);
-
     const tar: definitions.AP_MEM_TAR_LO = .{
         .ADDR = addr,
     };
     try write_dap_reg(self, @TypeOf(tar), tar);
 
+    while ((try read_dap_reg(self, @TypeOf(tar))).ADDR != addr) {}
     _ = try read_dap_reg(self, definitions.AP_MEM_DRW);
 
     for (0..buf.len - 1) |i| {
-        buf[i] = (try read_dap_reg(self, definitions.AP_MEM_DRW)).DATA;
+        buf[i] = (try read_dap_reg_as(self, definitions.RDBUFF, definitions.AP_MEM_DRW)).DATA;
+        _ = try read_dap_reg(self, definitions.AP_MEM_DRW);
     }
 
     const readval = try read_dap_reg_as(self, definitions.RDBUFF, definitions.AP_MEM_DRW);
@@ -195,16 +200,18 @@ fn read_mem_do(self: *ocd.API, addr: u32, buf: []u32) !u32 {
     return @intCast(buf.len);
 }
 
-inline fn write_mem_do(self: *ocd.API, addr: u32, buf: []u32) u32 {
+fn write_mem_do(self: *ocd.API, addr: u32, buf: []u32) !u32 {
     const tar: definitions.AP_MEM_TAR_LO = .{
         .ADDR = addr,
     };
-    write_dap_reg(self, @TypeOf(tar), tar);
+    try write_dap_reg(self, @TypeOf(tar), tar);
 
     for (0..buf.len - 1) |i| {
-        write_dap_reg(self, definitions.AP_MEM_DRW, buf[i]);
+        try write_dap_reg_raw(self, definitions.AP_MEM_DRW, buf[i]);
     }
-    read_dap_reg(self, definitions.RDBUFF);
+    _ = try read_dap_reg(self, definitions.RDBUFF);
+
+    return @intCast(buf.len);
 }
 
 fn mem_op_do(self: *ocd.API, addr: u32, buf: []u32, fun: fn (self: *ocd.API, addr: u32, buf: []u32) anyerror!u32) !u32 {
@@ -229,8 +236,13 @@ pub fn read_mem_single(self: *ocd.API, addr: u32) !u32 {
     return buf[0];
 }
 
-pub fn write_mem(self: *ocd.API, addr: u32, buf: []u32) void {
-    return mem_op_do(self, addr, buf, write_mem_do);
+pub fn write_mem(self: *ocd.API, addr: u32, buf: []u32) !void {
+    return try mem_op_do(self, addr, buf, write_mem_do);
+}
+
+pub fn write_mem_single(self: *ocd.API, addr: u32, val: u32) !void {
+    var buf: [1]u32 = .{val};
+    _ = try mem_op_do(self, addr, &buf, write_mem_do);
 }
 
 pub fn setup_connection(self: *ocd.API) !void {
