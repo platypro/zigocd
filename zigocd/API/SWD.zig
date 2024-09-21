@@ -20,6 +20,7 @@ pub const Error = error{
 // Cached values for SELECT register
 cached_select: definitions.SELECT = undefined,
 cached_select_old: definitions.SELECT = undefined,
+select_forced_update: bool = true,
 
 pub const SwdInfo = struct {
     APnDP: definitions.APnDP = .DP,
@@ -96,12 +97,13 @@ pub fn select_ap(self: *ocd.API, id: u8) !void {
 
 pub fn query_aps(self: *ocd.API) !std.ArrayList(definitions.AP_IDR) {
     var result = std.ArrayList(definitions.AP_IDR).init(self.allocator);
+
     for (0..255) |i| {
         try select_ap(self, @intCast(i));
         _ = try read_dap_reg(self, definitions.AP_IDR);
         const idr = read_dap_reg_as(self, definitions.RDBUFF, definitions.AP_IDR) catch {
-            // Clear error flags
-            _ = try self.vtable.swd.swd(self, .{ .APnDP = .DP, .RnW = .W, .A = .A00, .DATA = 0x0000001E });
+            //_ = try self.vtable.swd.swd(self, .{ .APnDP = .DP, .RnW = .W, .A = .A00, .DATA = try structToU32(ctrl_stat_default) });
+            try write_dap_reg_raw(self, definitions.ABORT, 0x1E);
             break;
         };
 
@@ -129,12 +131,17 @@ pub fn update_select_reg(self: *ocd.API, Reg: type) !definitions.RegisterAddress
             },
         }
     }
-    if (addr.BANKSEL != null and !std.meta.eql(ctx.cached_select, ctx.cached_select_old)) {
+    if ((addr.BANKSEL != null and !std.meta.eql(ctx.cached_select, ctx.cached_select_old)) or ctx.select_forced_update) {
         var result: anyerror!u32 = Error.Wait;
         while (result == Error.Wait) {
             result = self.vtable.swd.swd(self, .{ .APnDP = .DP, .RnW = .W, .A = definitions.SELECT.addr.A, .DATA = try structToU32(ctx.cached_select) });
         }
         ctx.cached_select_old = ctx.cached_select;
+        ctx.select_forced_update = true;
+    }
+
+    if (addr.BANKSEL == null) {
+        ctx.select_forced_update = true;
     }
     return addr;
 }
@@ -166,16 +173,18 @@ pub fn write_dap_reg(self: *ocd.API, Reg: type, value: Reg) !void {
 }
 
 pub fn mem_setup(self: *ocd.API) !void {
-    var csw = try read_dap_reg(self, definitions.AP_MEM_CSW);
-    csw.DEVICEEN = 1;
-    csw.DBGSWENABLE = 1;
-    csw.MTE = 0;
-    csw.ADDRINC = 0b01;
-    csw.Size = 0b010;
-    csw.SPIDEN = 1;
-    csw.PROT |= 0x3F;
-    csw.TYPE = 0;
-
+    const csw: definitions.AP_MEM_CSW = .{
+        .DEVICEEN = 1,
+        .DBGSWENABLE = 1,
+        .MTE = 0,
+        .ADDRINC = 0b10,
+        .Size = 0b010,
+        .SPIDEN = 1,
+        .PROT = 0x23,
+        .TYPE = 0,
+        .TRINPROG = 0,
+        .MODE = 0,
+    };
     try write_dap_reg(self, definitions.AP_MEM_CSW, csw);
     _ = try read_dap_reg(self, definitions.RDBUFF);
 }
@@ -186,16 +195,10 @@ fn read_mem_do(self: *ocd.API, addr: u32, buf: []u32) !u32 {
     };
     try write_dap_reg(self, @TypeOf(tar), tar);
 
-    while ((try read_dap_reg(self, @TypeOf(tar))).ADDR != addr) {}
-    _ = try read_dap_reg(self, definitions.AP_MEM_DRW);
-
-    for (0..buf.len - 1) |i| {
-        buf[i] = (try read_dap_reg_as(self, definitions.RDBUFF, definitions.AP_MEM_DRW)).DATA;
+    for (0..buf.len) |i| {
         _ = try read_dap_reg(self, definitions.AP_MEM_DRW);
+        buf[i] = (try read_dap_reg_as(self, definitions.RDBUFF, definitions.AP_MEM_DRW)).DATA;
     }
-
-    const readval = try read_dap_reg_as(self, definitions.RDBUFF, definitions.AP_MEM_DRW);
-    buf[buf.len - 1] = readval.DATA;
 
     return @intCast(buf.len);
 }
@@ -206,10 +209,10 @@ fn write_mem_do(self: *ocd.API, addr: u32, buf: []u32) !u32 {
     };
     try write_dap_reg(self, @TypeOf(tar), tar);
 
-    for (0..buf.len - 1) |i| {
+    for (0..buf.len) |i| {
         try write_dap_reg_raw(self, definitions.AP_MEM_DRW, buf[i]);
+        _ = try read_dap_reg(self, definitions.RDBUFF);
     }
-    _ = try read_dap_reg(self, definitions.RDBUFF);
 
     return @intCast(buf.len);
 }
@@ -252,16 +255,40 @@ pub fn setup_connection(self: *ocd.API) !void {
     _ = try read_dap_reg(self, definitions.DPIDR);
 
     // Clear error flags
-    _ = try self.vtable.swd.swd(self, .{ .APnDP = .DP, .RnW = .W, .A = .A00, .DATA = 0x0000001E });
+    try write_dap_reg_raw(self, definitions.ABORT, 0x1E);
+
+    var ctrl_stat: definitions.CTRL_STAT = .{
+        .CDBGPWRUPREQ = 1,
+        .CSYSPWRUPREQ = 1,
+        .CSYSPWRUPACK = 0,
+        .CDBGPWRUPACK = 0,
+        .TRNMODE = 0,
+        .MASKLANE = 0x0,
+        .STICKYORUN = 0,
+        .STICKYERR = 0,
+        .STICKYCMP = 0,
+        .READOK = 0,
+        .WDATAERR = 0,
+        .TRNCNT = 0,
+        .CDBGRSTREQ = 0,
+        .CDBGRSTACK = 0,
+        .ORUNDETECT = 1,
+    };
 
     // Power up system and DP and Debug
-    var ctrl_stat = try read_dap_reg(self, definitions.CTRL_STAT);
-    ctrl_stat.CDBGPWRUPREQ = 1;
-    ctrl_stat.CSYSPWRUPREQ = 1;
-    ctrl_stat.ORUNDETECT = 1;
     try write_dap_reg(self, definitions.CTRL_STAT, ctrl_stat);
 
-    while (ctrl_stat.CDBGPWRUPACK != 1) {
+    while (ctrl_stat.CDBGPWRUPACK != 1 or ctrl_stat.CSYSPWRUPACK != 1) {
         ctrl_stat = try read_dap_reg(self, definitions.CTRL_STAT);
     }
+
+    // Halt the cpu and enable debug
+    try write_mem_single(self, 0xE000EDF0, 0xA05F000E);
+
+    // Enable trace components
+    try select_ap(self, 0);
+    try mem_setup(self);
+    const demcr = try read_mem_single(self, 0xE000EDFC) | (1 << 24);
+    try write_mem_single(self, 0xE000EDFC, demcr);
+    std.debug.print("Out:{x}\n", .{try read_mem_single(self, 0xE000EDFC)});
 }

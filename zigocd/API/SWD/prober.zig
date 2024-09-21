@@ -139,6 +139,7 @@ pub fn probe(self: *ocd.API) !std.ArrayList(APDefinition) {
     for (aps.items, 0..) |idr, i| {
         const ap = try result.addOne();
         try SWD.select_ap(self, @truncate(i));
+        try SWD.mem_setup(self);
 
         _ = try SWD.read_dap_reg(self, definitions.AP_MEM_BASE_LO);
         const base: definitions.AP_MEM_BASE_LO = try SWD.read_dap_reg_as(self, definitions.RDBUFF, definitions.AP_MEM_BASE_LO);
