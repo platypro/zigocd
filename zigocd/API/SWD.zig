@@ -45,15 +45,15 @@ pub fn u32ToStruct(T: type, val_: u32) !T {
     const reader = bufstream.reader();
     var bit_reader = std.io.bitReader(.little, reader);
     var result: T = undefined;
-    inline for (@typeInfo(T).Struct.fields) |field| {
-        var out_bits: usize = 0;
+    inline for (@typeInfo(T).@"struct".fields) |field| {
+        var out_bits: u16 = 0;
         const typ = @typeInfo(field.type);
         switch (typ) {
-            .Int => {
-                @field(result, field.name) = try bit_reader.readBits(field.type, typ.Int.bits, &out_bits);
+            .int => {
+                @field(result, field.name) = try bit_reader.readBits(field.type, typ.int.bits, &out_bits);
             },
-            .Enum => {
-                @field(result, field.name) = @enumFromInt(try bit_reader.readBits(typ.Enum.tag_type, @typeInfo(typ.Enum.tag_type).Int.bits, &out_bits));
+            .@"enum" => {
+                @field(result, field.name) = @enumFromInt(try bit_reader.readBits(typ.@"enum".tag_type, @typeInfo(typ.@"enum".tag_type).int.bits, &out_bits));
             },
             else => {},
         }
@@ -66,16 +66,16 @@ pub fn structToU32(str: anytype) !u32 {
     var bufstream = std.io.fixedBufferStream(&result);
     const writer = bufstream.writer();
     var bit_writer = std.io.bitWriter(.little, writer);
-    inline for (@typeInfo(@TypeOf(str)).Struct.fields) |field| {
+    inline for (@typeInfo(@TypeOf(str)).@"struct".fields) |field| {
         const typ = @typeInfo(field.type);
         switch (typ) {
-            .Int => {
-                try bit_writer.writeBits(@field(str, field.name), typ.Int.bits);
+            .int => {
+                try bit_writer.writeBits(@field(str, field.name), typ.int.bits);
             },
-            .Enum => {
+            .@"enum" => {
                 const enum_val: field.type = @field(str, field.name);
                 const int_val = @intFromEnum(enum_val);
-                try bit_writer.writeBits(int_val, @typeInfo(typ.Enum.tag_type).Int.bits);
+                try bit_writer.writeBits(int_val, @typeInfo(typ.@"enum".tag_type).int.bits);
             },
             else => {},
         }

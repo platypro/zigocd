@@ -14,7 +14,7 @@ fn generate_coresight_ids() ![]const CoresightId {
 
     var entry_iter = std.mem.splitAny(u8, csv_src, "\n");
     while (entry_iter.next()) |entry| {
-        @setEvalBranchQuota(csv_src.len * 8);
+        @setEvalBranchQuota(csv_src.len * 15);
         var element: CoresightId = undefined;
         var field_iter = std.mem.splitAny(u8, entry, ",\n");
         element.manufacturer = std.fmt.parseInt(u16, field_iter.next().?, 0) catch break;

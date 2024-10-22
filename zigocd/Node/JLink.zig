@@ -136,7 +136,7 @@ fn swd(self: *ocd.API, info: SWD.SwdInfo) !u32 {
             var in_stream = std.io.fixedBufferStream(jlink.read_buf);
             const reader = in_stream.reader();
             var bit_reader = std.io.bitReader(.little, reader);
-            var out_bits: usize = 0;
+            var out_bits: u16 = 0;
             _ = try bit_reader.readBits(u32, 19, &out_bits);
             const result = try bit_reader.readBits(u32, 32, &out_bits);
             return result;

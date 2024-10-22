@@ -15,12 +15,6 @@
     // Once all dependencies are fetched, `zig build` no longer requires
     // internet connectivity.
     .dependencies = .{
-        .@"microzig/build" = .{
-            .path = "microzig/build",
-        },
-        .@"microzig/bsp/microchip/atsam" = .{
-            .path = "microzig/bsp/microchip/atsam",
-        },
         .zigocd = .{ .path = "zigocd" },
     },
     .paths = .{
