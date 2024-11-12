@@ -4,7 +4,7 @@ const std = @import("std");
 const ocd = @import("../../root.zig");
 const SWD = @import("../SWD.zig");
 
-const coresight_ids = @import("product_ids.zig");
+const coresight_ids = @import("coresight_ids");
 const CoresightEntry = struct { definitions.AP };
 
 const Error = error{

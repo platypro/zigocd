@@ -9,4 +9,5 @@
             .hash = "122012df9f49dcdbbd9d180716fb6c4c5fb34a37c0b8483a4838115f59087a4c6bde",
         },
     },
+    .paths = .{""},
 }
