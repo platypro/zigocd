@@ -16,6 +16,7 @@
     // internet connectivity.
     .dependencies = .{
         .zigocd = .{ .path = "zigocd" },
+        .test_firmware = .{ .path = "test_firmware" },
     },
     .paths = .{
         "build.zig",

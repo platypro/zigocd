@@ -22,6 +22,11 @@ pub fn build(b: *std.Build) void {
     // step when running `zig build`).
     b.installArtifact(exe);
 
+const test_firmware_dep = b.dependency("test_firmware", .{});
+const test_firmware = test_firmware_dep.artifact("test_firmware.elf");
+
+b.installArtifact(test_firmware);
+
     // This *creates* a Run step in the build graph, to be executed when another
     // step is evaluated that depends on it. The next line below will establish
     // such a dependency.
