@@ -9,7 +9,12 @@ pub fn build(b: *std.Build) !void {
         .os_tag = .freestanding,
     };
 
+    const header_gen = b.dependency("header_gen", .{});
     const target = b.resolveTargetQuery(target_query);
+
+    const header_gen_run = b.addRunArtifact(header_gen.artifact("header_gen"));
+    _ = header_gen_run;
+    //  header_gen_run.addArg(arg: []const u8)
 
     var exe = b.addExecutable(.{
         .name = "test_firmware.elf",

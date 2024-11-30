@@ -1,0 +1,15 @@
+.{
+    .name = "zigocd-test-firmware",
+    .version = "0.0.0",
+    .dependencies = .{
+        .header_gen = .{ .path = "../header-gen" },
+    },
+    .paths = .{
+        "build.zig",
+        "build.zig.zon",
+        "source.zig",
+        "startup.zig",
+        "test_firmware.ld",
+        "vector_table.zig",
+    },
+}

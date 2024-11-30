@@ -21,7 +21,7 @@ pub fn main() !void {
 
     const input_file = try std.fs.openFileAbsolute(input_file_name, .{ .mode = .read_only });
     defer input_file.close();
-    std.debug.print("File path: {s}", .{output_file_name});
+    //std.debug.print("File path: {s}", .{output_file_name});
     const output_file = try std.fs.createFileAbsolute(output_file_name, .{});
     defer output_file.close();
     var buf: [50]u8 = undefined;

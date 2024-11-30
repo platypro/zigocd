@@ -3,10 +3,9 @@ const std = @import("std");
 pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
+    const renderer_mod = b.addModule("renderer", .{ .root_source_file = b.path("src/Renderer.zig") });
 
-    const renderer_mod = b.addModule("renderer", .{ .root_source_file = b.path("Renderer.zig") });
-
-    const ocd = b.addModule("ocd", .{ .root_source_file = b.path("root.zig") });
+    const ocd = b.addModule("ocd", .{ .root_source_file = b.path("src/root.zig") });
     ocd.addImport("renderer", renderer_mod);
 
     // Link libusb
@@ -20,17 +19,15 @@ pub fn build(b: *std.Build) void {
     // Generate Coresight IDs if changed
     const coresight_id_exe = b.addExecutable(.{
         .name = "coresight_id_generator",
-        .root_source_file = b.path("./API/SWD/product_ids.zig"),
+        .root_source_file = b.path("./src/API/SWD/product_ids.zig"),
         .target = target,
         .optimize = optimize,
-        .use_lld = false,
-        .use_llvm = false,
     });
 
     coresight_id_exe.root_module.addImport("renderer", renderer_mod);
 
     const coresight_id_gen = b.addRunArtifact(coresight_id_exe);
-    coresight_id_gen.addFileArg(b.path("./API/SWD/product_ids.csv"));
+    coresight_id_gen.addFileArg(b.path("./src/API/SWD/product_ids.csv"));
     const coresight_id_zig = coresight_id_gen.addOutputFileArg("product_ids_gen.zig");
     b.path("API/SWD/product_ids.csv").addStepDependencies(&coresight_id_gen.step);
 
