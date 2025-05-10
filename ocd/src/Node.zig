@@ -81,14 +81,14 @@ pub const node_union = blk: {
     for (nodes) |node| {
         const nodeptr = @Type(std.builtin.Type{
             .pointer = .{
-                .size = .One,
+                .size = .one,
                 .is_const = false,
                 .is_volatile = false,
                 .alignment = @alignOf(node),
                 .address_space = .generic,
                 .child = node,
                 .is_allowzero = false,
-                .sentinel = null,
+                .sentinel_ptr = null,
             },
         });
 

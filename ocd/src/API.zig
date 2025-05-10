@@ -117,14 +117,14 @@ pub const api_union = blk: {
     for (apis) |api| {
         const apiptr = @Type(std.builtin.Type{
             .pointer = .{
-                .size = .One,
+                .size = .one,
                 .is_const = false,
                 .is_volatile = false,
                 .alignment = @alignOf(api),
                 .address_space = .generic,
                 .child = api,
                 .is_allowzero = false,
-                .sentinel = null,
+                .sentinel_ptr = null,
             },
         });
 

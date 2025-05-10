@@ -19,10 +19,10 @@ pub fn build(b: *std.Build) !void {
     var exe = b.addExecutable(.{
         .name = "test_firmware.elf",
         .root_source_file = b.path("startup.zig"),
-        .optimize = .Debug,
+        .optimize = .ReleaseFast,
         .target = target,
     });
-    exe.setLinkerScriptPath(b.path("test_firmware.ld"));
+    exe.setLinkerScript(b.path("test_firmware.ld"));
 
     b.installArtifact(exe);
 }

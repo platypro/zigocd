@@ -5,7 +5,7 @@ pub fn build(b: *std.Build) void {
     const optimize = b.standardOptimizeOption(.{});
     const renderer_mod = b.addModule("renderer", .{ .root_source_file = b.path("src/Renderer.zig") });
 
-    const ocd = b.addModule("ocd", .{ .root_source_file = b.path("src/root.zig") });
+    const ocd = b.addModule("ocd", .{ .root_source_file = b.path("src/root.zig"), .target = target, .optimize = optimize });
     ocd.addImport("renderer", renderer_mod);
 
     // Link libusb

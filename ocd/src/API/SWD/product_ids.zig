@@ -46,7 +46,7 @@ pub fn main() !void {
     try renderer.push(&.{.l_brace});
     while (input_file.reader().readUntilDelimiter(&buf, '\n') catch null) |entry| {
         // var element: CoresightId = undefined;
-        var field_iter = std.mem.splitAny(u8, entry, ",\n");
+        var field_iter = std.mem.splitAny(u8, entry, ",\r\n");
 
         try renderer.push(&.{ .period, .l_brace });
 

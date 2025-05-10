@@ -3,8 +3,8 @@
     .version = "0.0.0",
     .dependencies = .{
         .libusb = .{
-            .url = "git+https://github.com/platypro/libusb#832b30968e5912ed44e2b6f85b160bd1ca9c76d4",
-            .hash = "122012df9f49dcdbbd9d180716fb6c4c5fb34a37c0b8483a4838115f59087a4c6bde",
+            .url = "git+https://github.com/platypro/libusb#c154a65f608d493c9932b18c5e1af0066158c620",
+            .hash = "libusb-1.0.26-Isb-fWGNFwAYe8r-hpdD7ImrYkVbxqfN5UpuxoMvQ3XF",
         },
     },
     .paths = .{""},

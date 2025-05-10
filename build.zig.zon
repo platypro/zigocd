@@ -1,7 +1,10 @@
 .{
-    .name = "zigocd-meta",
+    .name = .zigocd_meta,
 
     .version = "0.0.0",
+    .minimum_zig_version = "0.14.0",
+
+    .fingerprint = 0xeff425ce178a64b,
 
     .dependencies = .{
         .zigocd = .{ .path = "ocd" },

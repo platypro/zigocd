@@ -1,6 +1,7 @@
 .{
-    .name = "zigocd-test-firmware",
+    .name = "zigocd_test_firmware",
     .version = "0.0.0",
+    .minimum_zig_version = "0.14.0",
     .dependencies = .{
         .header_gen = .{ .path = "../header-gen" },
     },
